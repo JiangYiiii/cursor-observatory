@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "project": {
+    "name": "stock-dashboard",
+    "type": "python-streamlit",
+    "language": "python",
+    "frameworks": ["streamlit", "fastapi"],
+    "repo_url": "https://github.com/...",
+    "description": "股票分析仪表板",
+    "root_path": "/Users/jiangyi/Documents/codedev/stock-dashboard"
+  },
+  "observatory": {
+    "initialized_at": "2026-04-05T10:00:00Z",
+    "last_full_scan": "2026-04-05T14:30:00Z",
+    "extension_version": "0.1.0",
+    "scanners_used": ["python", "sql", "git", "doc", "ai-doc-index"]
+  },
+  "metadata_sources": {
+    "ai_doc_index": "docs/00-meta/ai-doc-index.json",
+    "capability_catalog": "docs/business/CAPABILITY_CATALOG.md",
+    "feature_code_map": "docs/00-meta/PROJECT_FEATURES_AND_CODE_MAP.md"
+  }
+}

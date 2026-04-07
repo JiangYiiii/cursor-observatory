@@ -1,0 +1,20 @@
+# Cursor 本地调试日志
+.cursor/*.log
+
+node_modules/
+dist/
+*.vsix
+.DS_Store
+.env
+.env.*
+extension/dist/
+webview-ui/dist/
+
+# Observatory (auto)
+.observatory/
+
+# Observatory (auto)
+**/.observatory/
+
+# SDD 每特性本地 Observatory 产物（测试报告等，仅本机）
+specs/**/observatory/

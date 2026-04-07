@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-05T14:30:00Z",
+  "generation_method": "auto_import_analysis + pytest_markers",
+  "mappings": [
+    {
+      "test_file": "tests/test_pattern_similarity.py",
+      "capability_id": "PATTERN.SIMILARITY.SEARCH",
+      "confidence": "high",
+      "method": "pytest_marker",
+      "scenarios": {
+        "模板编码与哈希一致性": ["test_pattern_hash_stable"],
+        "形态相似度评分": [
+          "test_shape_self_high",
+          "test_shape_different_low",
+          "test_score_window_weights_override_base_shape_only"
+        ],
+        "端到端搜索流程": ["test_end_to_end_search"],
+        "回看窗口与切片": [
+          "test_effective_lookback_at_least_window",
+          "test_slice_symbol_df_for_search_tail",
+          "test_lookback_limits_match_range"
+        ],
+        "评分窗口计算": ["test_score_window_runs"]
+      }
+    }
+  ]
+}

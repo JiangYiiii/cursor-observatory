@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/progress.schema.json",
+  "title": "Observatory progress.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "timeline"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "summary": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "total_commits": { "type": "number" },
+        "active_branch": { "type": "string" },
+        "recent_days": { "type": "number" }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "timestamp", "type", "title"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "author": { "type": "string" },
+          "commit": { "type": "object", "additionalProperties": true },
+          "stats": { "type": "object", "additionalProperties": true },
+          "files": { "type": "array" },
+          "capability_ids": { "type": "array", "items": { "type": "string" } },
+          "session_id": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

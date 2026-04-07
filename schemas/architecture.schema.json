@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/architecture.schema.json",
+  "title": "Observatory architecture.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "generated_at", "modules", "edges"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "path", "type"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "type": { "type": "string" },
+          "description": { "type": "string" },
+          "language": { "type": "string" },
+          "files": { "type": "array" },
+          "imports_from": { "type": "array", "items": { "type": "string" } },
+          "imported_by": { "type": "array", "items": { "type": "string" } },
+          "capability_ids": { "type": "array", "items": { "type": "string" } },
+          "stats": { "type": "object", "additionalProperties": true }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "type"],
+        "additionalProperties": true,
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "type": { "type": "string" },
+          "weight": { "type": "number" }
+        }
+      }
+    },
+    "layers": { "type": "array" }
+  }
+}

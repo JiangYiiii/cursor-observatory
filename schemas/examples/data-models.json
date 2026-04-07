@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-05T14:30:00Z",
+  "source_files": ["sql/pattern_similarity_tables.sql", "sql/ai_assistant_tables.sql"],
+  "tables": [
+    {
+      "name": "pattern_search_history",
+      "schema": "public",
+      "description": "形态搜索历史记录",
+      "capability_ids": ["PATTERN.SIMILARITY.SEARCH"],
+      "columns": [
+        {
+          "name": "id",
+          "type": "BIGINT",
+          "nullable": false,
+          "primary_key": true,
+          "auto_increment": true
+        },
+        { "name": "user_id", "type": "INT", "nullable": false, "default": "0" },
+        { "name": "pattern_hash", "type": "VARCHAR(64)", "nullable": false },
+        { "name": "window_size", "type": "INT", "nullable": false },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      ],
+      "indexes": [
+        { "name": "idx_user_created", "columns": ["user_id", "created_at"], "unique": false }
+      ],
+      "foreign_keys": []
+    }
+  ],
+  "relationships": [
+    {
+      "from_table": "pattern_search_history",
+      "from_column": "user_id",
+      "to_table": "app_user",
+      "to_column": "id",
+      "type": "many_to_one"
+    }
+  ]
+}

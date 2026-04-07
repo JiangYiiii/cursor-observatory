@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "sessions": [
+    {
+      "id": "ses_20260405_001",
+      "title": "实现市场环境日标签",
+      "type": "development",
+      "status": "completed",
+      "project": "stock-dashboard",
+      "capability_ids": ["PATTERN.SIMILARITY.SEARCH"],
+      "created_at": "2026-04-05T10:00:00Z",
+      "updated_at": "2026-04-05T11:30:00Z",
+      "tags": ["市场环境", "CLI"],
+      "artifact_count": 2,
+      "message_count": 24
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/sessions-index.schema.json",
+  "title": "Observatory sessions/index.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "sessions"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "status", "created_at"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "type": { "type": "string" },
+          "status": { "type": "string" },
+          "project": { "type": "string" },
+          "capability_ids": { "type": "array", "items": { "type": "string" } },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "artifact_count": { "type": "number" },
+          "message_count": { "type": "number" }
+        }
+      }
+    }
+  }
+}

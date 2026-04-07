@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-05T14:30:00Z",
+  "expectations": {
+    "PATTERN.SIMILARITY.SEARCH": {
+      "scenarios": [
+        { "name": "模板编码与哈希一致性", "priority": "high", "covered": true },
+        {
+          "name": "形态相似度评分（自相似/差异/权重覆盖）",
+          "priority": "high",
+          "covered": true
+        },
+        { "name": "端到端搜索流程", "priority": "critical", "covered": true },
+        { "name": "回看窗口与切片逻辑", "priority": "medium", "covered": true },
+        { "name": "评分窗口计算", "priority": "medium", "covered": true },
+        { "name": "粗召回加速路径", "priority": "high", "covered": false },
+        { "name": "结果缓存命中与失效", "priority": "high", "covered": false }
+      ],
+      "analysis_method": "ai_code_analysis",
+      "last_analyzed": "2026-04-05"
+    }
+  }
+}

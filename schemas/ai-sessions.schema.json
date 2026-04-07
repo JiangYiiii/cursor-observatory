@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/ai-sessions.schema.json",
+  "title": "Observatory ai-sessions.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "sessions"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "status", "started_at"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "type": { "type": "string" },
+          "status": { "type": "string" },
+          "started_at": { "type": "string", "format": "date-time" },
+          "ended_at": { "type": "string", "format": "date-time" },
+          "duration_minutes": { "type": "number" },
+          "capability_ids": { "type": "array", "items": { "type": "string" } },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "files_modified": { "type": "array" },
+          "docs_updated": { "type": "array", "items": { "type": "string" } },
+          "tests_run": { "type": "object", "additionalProperties": true },
+          "commits": { "type": "array" },
+          "summary": { "type": "string" },
+          "transcript_file": { "type": "string" }
+        }
+      }
+    }
+  }
+}

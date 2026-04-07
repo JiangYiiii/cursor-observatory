@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-05T14:30:00Z",
+  "summary": {
+    "total_commits": 128,
+    "active_branch": "main",
+    "recent_days": 14
+  },
+  "timeline": [
+    {
+      "id": "prog_20260405_112500_abc123d",
+      "timestamp": "2026-04-05T11:25:00Z",
+      "type": "commit",
+      "title": "feat: add market environment daily tags",
+      "author": "jiangyi",
+      "commit": {
+        "hash": "abc123d",
+        "branch": "main"
+      },
+      "stats": {
+        "files_changed": 2,
+        "insertions": 135,
+        "deletions": 2
+      },
+      "files": [
+        { "path": "pattern_similarity/market_env.py", "status": "added" },
+        { "path": "stock_db/cli.py", "status": "modified" }
+      ],
+      "capability_ids": ["PATTERN.SIMILARITY.SEARCH"],
+      "session_id": "ses_20260405_001"
+    }
+  ]
+}

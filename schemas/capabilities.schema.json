@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/capabilities.schema.json",
+  "title": "Observatory capabilities.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "capabilities"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "phase"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "category": { "type": "string" },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "planning",
+              "designing",
+              "developing",
+              "testing",
+              "completed",
+              "released",
+              "deprecated"
+            ]
+          },
+          "progress": { "type": "number" },
+          "priority": { "type": "string" },
+          "owner": { "type": "string" },
+          "description": { "type": "string" },
+          "requirements": { "type": "object", "additionalProperties": true },
+          "code_entry_points": { "type": "array", "items": { "type": "string" } },
+          "primary_doc": { "type": "string" },
+          "related_docs": { "type": "array", "items": { "type": "string" } },
+          "test_files": { "type": "array", "items": { "type": "string" } },
+          "test_summary": { "type": "object", "additionalProperties": true },
+          "confidence": { "type": "string" },
+          "user_confirmed": { "type": "boolean" },
+          "source_module": { "type": "string" },
+          "dependencies": { "type": "array", "items": { "type": "string" } },
+          "dependents": { "type": "array", "items": { "type": "string" } },
+          "changelog": { "type": "array" },
+          "last_updated": { "type": "string", "format": "date-time" },
+          "sdd": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "enabled",
+              "workspacePath",
+              "activeFeature",
+              "documents"
+            ],
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "workspacePath": { "type": "string" },
+              "activeFeature": { "type": "boolean" },
+              "documents": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "spec",
+                  "sketch",
+                  "plan",
+                  "tasks",
+                  "dataModel",
+                  "contracts",
+                  "research"
+                ],
+                "properties": {
+                  "spec": { "type": "boolean" },
+                  "sketch": { "type": "boolean" },
+                  "plan": { "type": "boolean" },
+                  "tasks": { "type": "boolean" },
+                  "dataModel": { "type": "boolean" },
+                  "contracts": { "type": "boolean" },
+                  "research": { "type": "boolean" }
+                }
+              },
+              "taskStats": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["total", "completed"],
+                "properties": {
+                  "total": { "type": "number" },
+                  "completed": { "type": "number" }
+                }
+              },
+              "skipTestingAfterTasks": {
+                "type": "boolean",
+                "description": "任务全勾选后跳过「测试中」直接标已完成（observatory-sdd.json 或 plan/tasks 约定）"
+              },
+              "phaseDeclaredInObservatorySdd": {
+                "type": "boolean",
+                "description": "阶段是否由 observatory-sdd.json 的 declaredPhase 声明"
+              },
+              "specAuthor": {
+                "type": "string",
+                "description": "spec.md 首次加入仓库的提交作者"
+              }
+            }
+          },
+          "bugfix": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["activeBugs", "resolvedBugs", "rootCauses"],
+            "properties": {
+              "activeBugs": { "type": "number" },
+              "resolvedBugs": { "type": "number" },
+              "rootCauses": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "SPEC_GAP",
+                    "DESIGN_FLAW",
+                    "TASK_MISS",
+                    "IMPL_DEVIATION",
+                    "IMPL_BUG"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+---
+description: Observatory 能力与数据约定 — 初始化由 Cursor Observatory 扩展写入
+globs:
+  - "**/*"
+---
+
+# Observatory 项目协作
+
+## 能力（Capability）
+
+- 能力 ID 建议在 `docs/00-meta/ai-doc-index.json` 或代码注解中与 `business_doc_id` 对齐。
+- 开发过程中可在 Git 提交说明中**单独一行**写明要标记为「已发布」的能力，例如：
+  `Observatory: your-capability-id`
+  或 `能力: your-capability-id`（多个用英文逗号分隔）。
+- AI 会话会被扩展监听（需在设置中配置 **Agent 转录目录**），用于推断能力阶段（设计 / 开发 / 测试等）。**Run Full Scan** 写入的 `capabilities.json` **仅**包含 `specs/<feature>/` 下含 `spec.md` 或 `sketch.md` 的 SDD 能力；**不会**再从 `docs/00-meta/ai-doc-index.json` 或代码架构自动推断能力。若无任何 SDD feature，看板能力列表为空。阶段由 `spec.md` / `plan.md` / `tasks.md` 等产物驱动。
+- **SDD 任务全勾选**：默认进入「测试中」；若声明「无需单独测试」（`specs/<feature>/observatory-sdd.json` 的 `skipTestingAfterTasks`，或 plan/tasks 中带 `无需单独测试` / `Observatory: skip-testing` 的已勾选行）则全量扫描直接标「已完成」。需要测试时，导入测试结果且 `by_capability` 通过可将「测试中」标「已完成」（见设置 `observatory.capability.sddTestingCompleteOnTestPass`，旧键 `sddTestingCompleteOnPytestPass` 仍兼容）。
+- **SDD 显式阶段**：可在 `specs/<feature>/observatory-sdd.json` 设置 `declaredPhase`（`planning`～`deprecated`），**优先于**由 spec/plan/tasks 推断的阶段；全量扫描会保留该值（例如固定为 `completed` 以避免任务全勾后被推断为「测试中」）。
+
+## 数据模型
+
+- 项目内使用 `.observatory/data-models.json`；若自动扫描不准，请用命令 **Observatory: Open Data Model AI Prompt** 生成提示词，让 AI 输出符合 SCHEMA 的 JSON 后保存到该文件。
+
+## 测试
+
+推进测试前**判断仓库主栈**（`pom.xml`→Maven，`build.gradle*`→Gradle，`pyproject.toml`/`requirements.txt`→pytest，`package.json` 的 `test`→Node 等），勿默认 pytest。
+
+- **SDD**：扩展将规范化结果写入 **`specs/<active>/observatory/report.json`**（并兼容写入同目录 **`test-results.json`**；`observatory/` 建议 gitignore）。Python 可将 **pytest-json-report** 原始输出写到 **`specs/<active>/observatory/pytest-report.json`** 供自动导入。无 SDD 时可在根 **`.observatory/report.json`**（及兼容旧名 **`pytest-report.json`**）。兼容读取旧路径 **`specs/<feature>/test/`**、**`specs/<feature>/.observatory/`**。
+- **Java**：`mvn test` / `gradlew test` 后扩展**优先**自动导入较新的 SDD **`specs/<active>/observatory/report.json`**（规范化 JSON，含 `by_capability` 时与手点 Import 等价），否则聚合 Surefire **`TEST-*.xml`**；亦可 **Observatory: Import Test Report** 手动选择 JSON/XML。保存 `specs/.../observatory/report.json`（或兼容 `test/`）时也会去抖后自动导入（与终端短窗口去重）。
+- 设置 **`observatory.test.autoIngestTestReport`**（旧键 `autoIngestPytestReport` 仍兼容）控制集成终端结束与上述文件保存后是否自动导入。

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/test-results.schema.json",
+  "title": "Observatory test-results.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "last_run", "runner", "summary", "test_cases"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "last_run": { "type": "string", "format": "date-time" },
+    "runner": { "type": "string" },
+    "summary": {
+      "type": "object",
+      "required": ["total", "passed", "failed"],
+      "additionalProperties": true,
+      "properties": {
+        "total": { "type": "number" },
+        "passed": { "type": "number" },
+        "failed": { "type": "number" },
+        "skipped": { "type": "number" },
+        "errors": { "type": "number" },
+        "duration_ms": { "type": "number" }
+      }
+    },
+    "test_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "file", "name", "status"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "file": { "type": "string" },
+          "class": { "type": "string" },
+          "name": { "type": "string" },
+          "status": { "type": "string" },
+          "duration_ms": { "type": "number" },
+          "capability_id": { "type": ["string", "null"] },
+          "scenario": { "type": ["string", "null"] },
+          "error_message": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "by_capability": { "type": "object", "additionalProperties": true }
+  }
+}

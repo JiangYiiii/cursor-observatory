@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "last_run": "2026-04-05T14:30:00Z",
+  "runner": "pytest",
+  "summary": {
+    "total": 14,
+    "passed": 14,
+    "failed": 0,
+    "skipped": 0,
+    "errors": 0,
+    "duration_ms": 1250
+  },
+  "test_cases": [
+    {
+      "id": "tests/test_pattern_similarity.py::TestPatternSimilarity::test_pattern_hash_stable",
+      "file": "tests/test_pattern_similarity.py",
+      "class": "TestPatternSimilarity",
+      "name": "test_pattern_hash_stable",
+      "status": "passed",
+      "duration_ms": 12,
+      "capability_id": "PATTERN.SIMILARITY.SEARCH",
+      "scenario": "模板编码与哈希一致性",
+      "error_message": null
+    }
+  ],
+  "by_capability": {
+    "PATTERN.SIMILARITY.SEARCH": { "total": 9, "passed": 9, "failed": 0 },
+    "AUTH.APP.USER": { "total": 2, "passed": 2, "failed": 0 },
+    "AI.AGENT.CORE": { "total": 2, "passed": 2, "failed": 0 },
+    "UI.APP.CHARTS": { "total": 1, "passed": 1, "failed": 0 }
+  }
+}

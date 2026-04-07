@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-05T14:30:00Z",
+  "modules": [
+    {
+      "id": "pattern_similarity",
+      "name": "pattern_similarity",
+      "path": "pattern_similarity/",
+      "type": "package",
+      "description": "形态相似度搜索核心引擎",
+      "language": "python",
+      "files": [
+        { "path": "search.py", "lines": 245, "functions": 8 },
+        { "path": "scoring.py", "lines": 180, "functions": 5 },
+        { "path": "models.py", "lines": 92, "functions": 0 },
+        { "path": "cache.py", "lines": 67, "functions": 3 }
+      ],
+      "imports_from": ["stock_db", "shared"],
+      "imported_by": ["views", "value_task"],
+      "capability_ids": ["PATTERN.SIMILARITY.SEARCH"],
+      "stats": {
+        "total_lines": 584,
+        "total_functions": 16,
+        "total_classes": 3
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "views",
+      "to": "pattern_similarity",
+      "type": "import",
+      "weight": 5
+    },
+    {
+      "from": "pattern_similarity",
+      "to": "stock_db",
+      "type": "import",
+      "weight": 3
+    }
+  ],
+  "layers": [
+    { "name": "presentation", "modules": ["views", "shared"] },
+    { "name": "business", "modules": ["pattern_similarity", "value_task", "scan_task", "ai"] },
+    { "name": "data", "modules": ["stock_db", "data_fetcher"] },
+    { "name": "infrastructure", "modules": ["scheduler", "pipeline", "sync_task"] }
+  ]
+}

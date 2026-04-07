@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/test-expectations.schema.json",
+  "title": "Observatory test-expectations.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "expectations"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "expectations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["scenarios"],
+        "additionalProperties": true,
+        "properties": {
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "priority", "covered"],
+              "additionalProperties": true,
+              "properties": {
+                "name": { "type": "string" },
+                "priority": { "type": "string" },
+                "covered": { "type": "boolean" }
+              }
+            }
+          },
+          "analysis_method": { "type": "string" },
+          "last_analyzed": { "type": "string" }
+        }
+      }
+    }
+  }
+}

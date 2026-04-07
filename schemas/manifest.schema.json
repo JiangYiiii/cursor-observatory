@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/manifest.schema.json",
+  "title": "Observatory manifest.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "project", "observatory"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "project": {
+      "type": "object",
+      "required": ["name", "type", "language"],
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "language": { "type": "string" },
+        "frameworks": { "type": "array", "items": { "type": "string" } },
+        "repo_url": { "type": "string" },
+        "description": { "type": "string" },
+        "root_path": { "type": "string" }
+      }
+    },
+    "observatory": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "initialized_at": { "type": "string", "format": "date-time" },
+        "last_full_scan": { "type": "string", "format": "date-time" },
+        "extension_version": { "type": "string" },
+        "scanners_used": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "metadata_sources": { "type": "object", "additionalProperties": true }
+  }
+}

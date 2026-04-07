@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/test-mapping.schema.json",
+  "title": "Observatory test-mapping.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "mappings"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "generation_method": { "type": "string" },
+    "mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["test_file", "capability_id"],
+        "additionalProperties": true,
+        "properties": {
+          "test_file": { "type": "string" },
+          "capability_id": { "type": "string" },
+          "confidence": { "type": "string" },
+          "method": { "type": "string" },
+          "scenarios": { "type": "object", "additionalProperties": true }
+        }
+      }
+    }
+  }
+}

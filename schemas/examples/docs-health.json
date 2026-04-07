@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-05T14:30:00Z",
+  "overall_score": 78,
+  "checks": [
+    {
+      "check": "business_doc_id_coverage",
+      "description": "代码中 business_doc_id 标注覆盖率",
+      "score": 85,
+      "details": {
+        "total_modules": 12,
+        "annotated_modules": 10,
+        "missing": ["scan_task", "sync_task"]
+      }
+    },
+    {
+      "check": "doc_index_consistency",
+      "description": "ai-doc-index.json 与代码标注一致性",
+      "score": 92,
+      "details": {
+        "total_entries": 25,
+        "consistent": 23,
+        "orphan_entries": ["UI.APP.QUOTES"],
+        "missing_entries": []
+      }
+    },
+    {
+      "check": "primary_doc_validity",
+      "description": "primary_doc 路径有效性",
+      "score": 100,
+      "details": {
+        "total_paths": 20,
+        "valid": 20,
+        "broken": []
+      }
+    },
+    {
+      "check": "capability_test_coverage",
+      "description": "能力级测试覆盖",
+      "score": 35,
+      "details": {
+        "total_capabilities": 15,
+        "with_tests": 4,
+        "without_tests": 11
+      }
+    }
+  ]
+}

@@ -1,0 +1,206 @@
+{
+  "name": "cursor-observatory",
+  "displayName": "Cursor Observatory",
+  "description": "AI 开发可观测：能力阶段推断、Agent 转录、数据模型 AI 引导、仪表盘与 .observatory 数据层。AI dev observability: capability phases, transcripts, data-model prompts, dashboard.",
+  "version": "0.1.0",
+  "publisher": "cursor-observatory",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "cursor",
+    "observatory",
+    "ai",
+    "capability",
+    "dashboard",
+    "pytest",
+    "transcript",
+    "可观测"
+  ],
+  "icon": "media/logo.png",
+  "activationEvents": [
+    "workspaceContains:.observatory",
+    "onCommand:observatory.initialize",
+    "onCommand:observatory.openDashboard",
+    "onCommand:observatory.runFullScan",
+    "onCommand:observatory.runTests",
+    "onCommand:observatory.ingestPytestReport",
+    "onCommand:observatory.showInDashboard",
+    "onCommand:observatory.openDataModelAiPrompt",
+    "onCommand:observatory.configureSdd"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "observatory.initialize",
+        "title": "Observatory: Initialize Project"
+      },
+      {
+        "command": "observatory.openDashboard",
+        "title": "Observatory: Open Dashboard"
+      },
+      {
+        "command": "observatory.runFullScan",
+        "title": "Observatory: Run Full Scan"
+      },
+      {
+        "command": "observatory.runTests",
+        "title": "Observatory: Run Tests"
+      },
+      {
+        "command": "observatory.ingestPytestReport",
+        "title": "Observatory: Import Test Report"
+      },
+      {
+        "command": "observatory.showInDashboard",
+        "title": "Observatory: Show in Dashboard"
+      },
+      {
+        "command": "observatory.openDataModelAiPrompt",
+        "title": "Observatory: Open Data Model AI Prompt"
+      },
+      {
+        "command": "observatory.configureSdd",
+        "title": "Observatory: Configure SDD Integration"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "observatory-sidebar",
+          "title": "Observatory",
+          "icon": "media/logo.png"
+        }
+      ]
+    },
+    "views": {
+      "observatory-sidebar": [
+        {
+          "id": "observatory.capabilities",
+          "name": "需求"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Observatory",
+      "properties": {
+        "observatory.server.port": {
+          "type": "number",
+          "default": 3800,
+          "description": "Local HTTP server port for browser dashboard."
+        },
+        "observatory.server.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start HTTP server when the extension activates."
+        },
+        "observatory.scan.debounceMs": {
+          "type": "number",
+          "default": 5000,
+          "description": "Debounce window for file change scanning (ms)."
+        },
+        "observatory.scan.ignorePaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["node_modules", ".venv", "__pycache__"],
+          "description": "Path segments to ignore when scanning."
+        },
+        "observatory.git.watchEnabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "observatory.transcript.watchEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "监听 Agent 转录目录中的 .jsonl 变更。"
+        },
+        "observatory.transcript.agentTranscriptsPath": {
+          "type": "string",
+          "default": "",
+          "description": "手动指定 agent-transcripts 目录绝对路径；留空则按 ~/.cursor/projects/<工作区路径转 slug>/agent-transcripts 等规则自动探测。可使用 ${workspaceFolder}。"
+        },
+        "observatory.capability.aiPhaseInferenceEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "根据 AI 会话文本推断能力阶段（设计/开发/测试），并写回 capabilities.json。"
+        },
+        "observatory.capability.autoCompleteOnTestsPass": {
+          "type": "boolean",
+          "default": true,
+          "description": "导入测试结果后，若某能力在 testing 且 by_capability 全通过，则标为 completed（未 Git 发布前的完工）。"
+        },
+        "observatory.capability.sddTestingCompleteOnTestPass": {
+          "type": "boolean",
+          "default": true,
+          "description": "SDD 能力处于「测试中」且测试结果按能力维度全通过时，是否标为「已完成」。为 false 时 SDD 仅由 specs 扫描改阶段（与旧行为一致）。"
+        },
+        "observatory.capability.sddTestingCompleteOnPytestPass": {
+          "type": "boolean",
+          "default": true,
+          "description": "Deprecated: use observatory.capability.sddTestingCompleteOnTestPass.",
+          "deprecationMessage": "Renamed to observatory.capability.sddTestingCompleteOnTestPass"
+        },
+        "observatory.onboarding.createCursorRule": {
+          "type": "boolean",
+          "default": true,
+          "description": "执行 Initialize Project 时，若不存在则创建 .cursor/rules/observatory-project.mdc。"
+        },
+        "observatory.test.framework": {
+          "type": "string",
+          "enum": ["auto", "pytest", "jest", "junit"],
+          "default": "auto",
+          "description": "Run Tests 命令的提示取向：auto 按仓库文件（pom/build.gradle/pyproject/package.json）粗判；其余为强制提示对应栈。"
+        },
+        "observatory.test.autoDetectResults": {
+          "type": "boolean",
+          "default": true
+        },
+        "observatory.test.autoIngestTestReport": {
+          "type": "boolean",
+          "default": true,
+          "description": "集成终端中 pytest / mvn test / gradlew test 结束后，若存在较新的测试报告则自动导入（需 Shell Integration；SDD 优先 specs/<active>/test/）。"
+        },
+        "observatory.test.autoIngestPytestReport": {
+          "type": "boolean",
+          "default": true,
+          "description": "Deprecated: use observatory.test.autoIngestTestReport.",
+          "deprecationMessage": "Renamed to observatory.test.autoIngestTestReport"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "webpack --mode production",
+    "watch": "webpack --mode development --watch",
+    "vscode:prepublish": "npm run compile",
+    "build": "webpack --mode production",
+    "package": "vsce package --no-dependencies",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "express": "^4.21.2",
+    "fast-glob": "^3.3.3",
+    "simple-git": "^3.27.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.0",
+    "@types/ws": "^8.5.13",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "copy-webpack-plugin": "^12.0.2",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.4.5",
+    "vitest": "^2.1.9",
+    "webpack": "^5.91.0",
+    "webpack-cli": "^5.1.4"
+  }
+}

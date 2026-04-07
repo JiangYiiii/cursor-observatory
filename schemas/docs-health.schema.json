@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/docs-health.schema.json",
+  "title": "Observatory docs-health.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "checks"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "overall_score": { "type": "number" },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["check", "description", "score"],
+        "additionalProperties": true,
+        "properties": {
+          "check": { "type": "string" },
+          "description": { "type": "string" },
+          "score": { "type": "number" },
+          "details": { "type": "object", "additionalProperties": true }
+        }
+      }
+    }
+  }
+}

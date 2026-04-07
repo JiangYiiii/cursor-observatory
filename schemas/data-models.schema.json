@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/data-models.schema.json",
+  "title": "Observatory data-models.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "tables"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "source_files": { "type": "array", "items": { "type": "string" } },
+    "tables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "columns"],
+        "additionalProperties": true,
+        "properties": {
+          "name": { "type": "string" },
+          "schema": { "type": "string" },
+          "description": { "type": "string" },
+          "capability_ids": { "type": "array", "items": { "type": "string" } },
+          "columns": { "type": "array" },
+          "indexes": { "type": "array" },
+          "foreign_keys": { "type": "array" }
+        }
+      }
+    },
+    "relationships": { "type": "array" }
+  }
+}

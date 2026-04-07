@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-05T14:30:00Z",
+  "capabilities": [
+    {
+      "id": "PATTERN.SIMILARITY.SEARCH",
+      "title": "形态相似度搜索",
+      "category": "user_facing",
+      "phase": "developing",
+      "progress": 85,
+      "priority": "high",
+      "owner": "ai-agent",
+      "description": "基于控制点+文本规则的形态搜索引擎，支持模板管理、粗召回、后验试算",
+      "requirements": {
+        "source_doc": "docs/requirements/PATTERN_CONFIG_MODULE_PRD.md",
+        "acceptance_criteria": [
+          { "id": "AC-1", "text": "支持 5/6/8 控制点模板", "status": "passed" },
+          { "id": "AC-2", "text": "搜索结果短时缓存", "status": "in_progress" },
+          { "id": "AC-3", "text": "后验试算（样本不足弱化提示）", "status": "passed" },
+          { "id": "AC-4", "text": "市场环境日标签", "status": "passed" },
+          { "id": "AC-5", "text": "PRESET 种子模板", "status": "passed" }
+        ]
+      },
+      "code_entry_points": [
+        "pattern_similarity/search.py",
+        "pattern_similarity/scoring.py",
+        "views/pattern_similarity.py"
+      ],
+      "primary_doc": "docs/technical/PATTERN_SIMILARITY_SEARCH_IMPLEMENTATION_PLAN.md",
+      "related_docs": ["docs/process/PATTERN_SIMILARITY_DELIVERY_TRACKER.md"],
+      "test_files": ["tests/test_pattern_similarity.py"],
+      "test_summary": {
+        "total": 9,
+        "passed": 9,
+        "failed": 0,
+        "coverage_scenarios": 5,
+        "expected_scenarios": 7,
+        "status": "good"
+      },
+      "confidence": "high",
+      "user_confirmed": true,
+      "source_module": "pattern_similarity",
+      "dependencies": ["DATA.OHLCV.SYNC", "PATTERN.ENGINE"],
+      "dependents": ["VALUE.SCREENER.CORE"],
+      "changelog": [
+        {
+          "date": "2026-04-05",
+          "action": "市场环境日标签 CLI 完成",
+          "session_id": "ses_20260405_001"
+        },
+        {
+          "date": "2026-04-03",
+          "action": "后验评分模块上线",
+          "session_id": "ses_20260403_002"
+        }
+      ],
+      "last_updated": "2026-04-05T14:30:00Z"
+    }
+  ]
+}
