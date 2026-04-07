@@ -5,6 +5,11 @@
  */
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import {
+  legacyObservatorySddJsonAbs,
+  observatorySddJsonAbs,
+  resolveSddObservatorySubdirNameSync,
+} from "../../observatory/sdd-test-paths";
 
 const PLAN_OR_TASK_LINE = new RegExp(
   "^\\s*[-*]\\s*\\[[xX]\\]\\s*.*(?:无需(?:单独|额外)?测试|NO_TEST_PHASE|observatory-skip-testing|Observatory:\\s*skip-testing)",
@@ -38,17 +43,37 @@ interface ObservatorySddJsonShape {
   declaredPhase?: unknown;
 }
 
+/** 与 `readObservatorySddConfigMerged` 顺序一致：先 observatory 子目录内，再 legacy 平级 */
+function observatorySddJsonReadPaths(featureDir: string): string[] {
+  const parent = path.dirname(featureDir);
+  if (path.basename(parent) === "specs") {
+    const workspaceRoot = path.dirname(parent);
+    const featureName = path.basename(featureDir);
+    return [
+      observatorySddJsonAbs(workspaceRoot, featureName),
+      legacyObservatorySddJsonAbs(workspaceRoot, featureName),
+    ];
+  }
+  const sub = resolveSddObservatorySubdirNameSync(featureDir);
+  return [
+    path.join(featureDir, sub, "observatory-sdd.json"),
+    path.join(featureDir, "observatory-sdd.json"),
+  ];
+}
+
 async function readObservatorySddJsonFile(
   featureDir: string
 ): Promise<ObservatorySddJsonShape | null> {
-  const jsonPath = path.join(featureDir, "observatory-sdd.json");
-  try {
-    const raw = await fs.readFile(jsonPath, "utf8");
-    const j = JSON.parse(raw) as ObservatorySddJsonShape;
-    return j && typeof j === "object" && !Array.isArray(j) ? j : null;
-  } catch {
-    return null;
+  for (const jsonPath of observatorySddJsonReadPaths(featureDir)) {
+    try {
+      const raw = await fs.readFile(jsonPath, "utf8");
+      const j = JSON.parse(raw) as ObservatorySddJsonShape;
+      return j && typeof j === "object" && !Array.isArray(j) ? j : null;
+    } catch {
+      /* try next */
+    }
   }
+  return null;
 }
 
 async function readSkipTestingFromPlanOrTasks(

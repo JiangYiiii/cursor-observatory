@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, Copy, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Copy, Maximize2, Sparkles } from "lucide-react";
 import {
   Card,
   EmptyState,
   ErrorState,
   LoadingSkeleton,
 } from "@/components/common";
-import { ERDiagram, TableDetail } from "@/components/er";
+import { ERDiagram, ERDiagramLightbox, TableDetail } from "@/components/er";
 import { SourceFilesCollapsible } from "@/components/er/SourceFilesCollapsible";
 import {
   buildErMermaid,
@@ -140,6 +140,7 @@ export function DataModels() {
   const [erMaxNodes, setErMaxNodes] = useState(48);
   /** 紧凑实体：省略列定义以减小 Mermaid 文本 */
   const [erCompact, setErCompact] = useState(false);
+  const [erLightboxOpen, setErLightboxOpen] = useState(false);
 
   const tables = (dataModels?.tables ?? []) as DataModelTable[];
   const relationships = dataModels?.relationships ?? [];
@@ -311,7 +312,7 @@ export function DataModels() {
                   const k = tableKey(t);
                   return (
                     <option key={k} value={k}>
-                      {k}
+                      {t.name}
                     </option>
                   );
                 })}
@@ -378,11 +379,30 @@ export function DataModels() {
             </div>
           ) : null}
 
-          <div className="min-w-0 rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-700 dark:bg-zinc-900/30">
+          <div className="relative min-w-0 rounded-lg border border-zinc-100 bg-zinc-50/50 p-3 dark:border-zinc-700 dark:bg-zinc-900/30">
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                disabled={!mermaidDef.trim()}
+                onClick={() => setErLightboxOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                title={mermaidDef.trim() ? "在新窗口区域放大查看 ER 图" : "暂无 ER 内容"}
+              >
+                <Maximize2 className="size-3.5 shrink-0" aria-hidden />
+                放大查看
+              </button>
+            </div>
             <ERDiagram definition={mermaidDef} dark={dark} />
           </div>
         </Card>
       </div>
+
+      <ERDiagramLightbox
+        open={erLightboxOpen}
+        onClose={() => setErLightboxOpen(false)}
+        definition={mermaidDef}
+        dark={dark}
+      />
 
       <TableDetail
         table={selectedTable}

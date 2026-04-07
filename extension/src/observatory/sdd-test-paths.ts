@@ -11,12 +11,50 @@ export const SPECS_ACTIVE_REL = path.join("specs", ".active");
 /** SDD 下规范化测试结果（与 `.observatory/test-results.json` 同 schema） */
 export const SDD_TEST_REPORT_JSON = "report.json";
 
-/** `specs/<feature>/observatory`（绝对路径），读写主路径 */
+/**
+ * 解析 `specs/<feature>/` 下已存在的 Observatory 产物目录名（兼容 `Observatory` 大小写）。
+ * 若尚未创建子目录，则默认使用小写 `observatory` 作为写入路径。
+ */
+export function resolveSddObservatorySubdirNameSync(featureDirAbs: string): string {
+  try {
+    const entries = fs.readdirSync(featureDirAbs, { withFileTypes: true });
+    const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    if (dirs.includes("observatory")) return "observatory";
+    const found = dirs.find((n) => n.toLowerCase() === "observatory");
+    if (found) return found;
+  } catch {
+    /* 目录不存在等 */
+  }
+  return "observatory";
+}
+
+/** `specs/<feature>/<observatory|Observatory>/`（绝对路径），与磁盘上实际目录名一致 */
 export function sddFeatureObservatoryDirAbs(
   workspaceRoot: string,
   featureName: string
 ): string {
-  return path.join(workspaceRoot, "specs", featureName, "observatory");
+  const featureDir = path.join(workspaceRoot, "specs", featureName);
+  const sub = resolveSddObservatorySubdirNameSync(featureDir);
+  return path.join(featureDir, sub);
+}
+
+/** 旧位置：`specs/<feature>/observatory-sdd.json`（仍兼容读取） */
+export function legacyObservatorySddJsonAbs(
+  workspaceRoot: string,
+  featureName: string
+): string {
+  return path.join(workspaceRoot, "specs", featureName, "observatory-sdd.json");
+}
+
+/** 新位置：`specs/<feature>/observatory/observatory-sdd.json`（与影响分析等产物同目录） */
+export function observatorySddJsonAbs(
+  workspaceRoot: string,
+  featureName: string
+): string {
+  return path.join(
+    sddFeatureObservatoryDirAbs(workspaceRoot, featureName),
+    "observatory-sdd.json"
+  );
 }
 
 /**

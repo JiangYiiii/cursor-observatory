@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/impact-analysis.schema.json",
+  "title": "SDD observatory impact-analysis.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analyzed_at",
+    "base_ref",
+    "workspace_branch",
+    "head_commit",
+    "working_tree_fingerprint",
+    "generated_from_changed_files",
+    "summary",
+    "scenarios",
+    "affected_modules",
+    "changed_files"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "analyzed_at": { "type": "string", "format": "date-time" },
+    "base_ref": {
+      "type": "string",
+      "description": "对比基准。模式 A 时为 merge-base commit；模式 B 时为 'WORKING_TREE_ONLY'；模式 C 时为 'TASKS_FALLBACK'。由扩展注入，AI 可不填。"
+    },
+    "workspace_branch": {
+      "type": "string",
+      "description": "生成时所在分支。由扩展注入。无 commit 时为 'NO_BRANCH'。"
+    },
+    "head_commit": {
+      "type": "string",
+      "description": "生成时 HEAD commit SHA。由扩展注入。全新仓库时为 'NO_COMMITS'。"
+    },
+    "working_tree_fingerprint": {
+      "type": "string",
+      "description": "工作区指纹。由扩展注入，AI 不填写。"
+    },
+    "generated_from_changed_files": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "minItems": 1,
+      "description": "参与分析的文件列表。AI 填写实际分析的文件。"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_scenarios",
+        "high_impact",
+        "medium_impact",
+        "low_impact",
+        "affected_modules",
+        "affected_applications"
+      ],
+      "properties": {
+        "total_scenarios": { "type": "integer", "minimum": 0 },
+        "high_impact": { "type": "integer", "minimum": 0 },
+        "medium_impact": { "type": "integer", "minimum": 0 },
+        "low_impact": { "type": "integer", "minimum": 0 },
+        "affected_modules": { "type": "integer", "minimum": 0 },
+        "affected_applications": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "impact", "module"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^SCENARIO_\\d{3,}$" },
+          "name": { "type": "string", "minLength": 1 },
+          "impact": { "enum": ["high", "medium", "low"] },
+          "anchor_id": { "type": "string" },
+          "description": { "type": "string" },
+          "related_files": { "type": "array", "items": { "type": "string" } },
+          "module": { "type": "string" }
+        }
+      }
+    },
+    "affected_modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path", "is_application", "scenario_count"],
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" },
+          "is_application": { "type": "boolean" },
+          "entry_class": { "type": "string" },
+          "scenario_count": { "type": "integer", "minimum": 0 },
+          "scenario_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "change_type", "module"],
+        "properties": {
+          "path": { "type": "string" },
+          "change_type": { "enum": ["modified", "added", "deleted"] },
+          "module": { "type": "string" },
+          "has_ai_doc": { "type": "boolean" },
+          "anchor_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  }
+}

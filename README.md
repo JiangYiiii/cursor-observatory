@@ -50,6 +50,7 @@ Observatory 在单个扩展内同时提供：**数据采集**、**项目内 JSON
 | **数据模型 AI 引导** | 命令 **Open Data Model AI Prompt** 生成说明文档，便于让 AI 输出完整 `data-models.json`（替代仅依赖 SQL 正则扫描）。 |
 | **项目初始化 Rule** | **Initialize Project** 时可在 `.cursor/rules/observatory-project.mdc` 写入协作约定（可关）。 |
 | **可靠性** | 统一错误体 `{ code, message, detail, retryable }`；扩展侧 **状态机**（如 INITIALIZING / READY / SCANNING / DEGRADED 等）；HTTP 服务启动失败时可进入降级路径。 |
+| **需求面板 V2** | SDD 能力右侧详情：需求链接（TAPD 时可一键复制 AI 指令拉取 MCP 详情 / Cheetah+Git 分支工作流）、`specs/<feature>/observatory/` 下的 `impact-analysis` / `test-cases` JSON 与派生 Markdown（兼容 `Observatory` 目录名大小写）、`observatory-sdd.json` 与部署手工服务列表、UT/部署/测试用例 Prompt、MCP 预检与 Git 新鲜度；配置项见 `observatory.prompt.*` / `observatory.skill.*` / `observatory.mcp.*` / `observatory.deploy.defaultServiceList`。设计见 `docs/REQUIREMENT_PANEL_V2_DESIGN.md`，使用说明见 `docs/USER_GUIDE.md` §8。 |
 
 仪表盘内各面板（概览、架构、能力看板、数据模型、AI 会话、质量监控等）的**详细交互**以 `docs/FRONTEND_DESIGN.md` 与实现为准；上表为产品级能力边界说明。
 
@@ -128,6 +129,8 @@ Observatory 在单个扩展内同时提供：**数据采集**、**项目内 JSON
 | `observatory.capability.aiPhaseInferenceEnabled` | boolean | `true` | 是否根据 Agent 会话文本自动上调能力阶段。 |
 | `observatory.capability.autoCompleteOnTestsPass` | boolean | `true` | 导入测试结果后，是否将「测试中」且 `by_capability` 全通过的能力标为 **已完成**。 |
 | `observatory.onboarding.createCursorRule` | boolean | `true` | Initialize 时是否创建 `.cursor/rules/observatory-project.mdc`。 |
+| `observatory.deploy.defaultServiceList` | string | `""` | 需求面板「环境部署」：影响分析未列出应用服务时，与需求级 `deployServiceList` 合并的默认服务名（英文逗号分隔）。 |
+| `observatory.mcp.cheetah` | string | `""` | Cheetah（泳道/OpenAPI）MCP 服务名；TAPD 需求链接旁「分支工作流」复制 Prompt 中引用。 |
 
 **Git 提交与「已发布」**：在新提交说明中单独一行写 `Observatory: cap-id-one,cap-id-two`（或 `能力:` 前缀），扩展会将对应能力阶段设为 **released**。
 

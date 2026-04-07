@@ -37,4 +37,17 @@ describe("resolveSddReportJsonAbsPath", () => {
     roots.push(root);
     expect(resolveSddReportJsonAbsPath(root)).toBeUndefined();
   });
+
+  it("uses existing Observatory directory name when casing is not lowercase", () => {
+    const root = fs.mkdtempSync(path.join(tmpdir(), "obs-sdd-path-"));
+    roots.push(root);
+    fs.mkdirSync(path.join(root, "specs", "m0-foo", "Observatory"), {
+      recursive: true,
+    });
+    fs.writeFileSync(path.join(root, "specs", ".active"), "m0-foo\n");
+    const got = resolveSddReportJsonAbsPath(root);
+    expect(got).toBe(
+      path.join(root, "specs", "m0-foo", "Observatory", SDD_TEST_REPORT_JSON)
+    );
+  });
 });

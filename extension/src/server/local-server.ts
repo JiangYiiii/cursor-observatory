@@ -11,11 +11,30 @@ import type { WebSocket } from "ws";
 import { WebSocketServer } from "ws";
 import type { TestExpectations } from "../observatory/types";
 import type { ObservatoryStore } from "../observatory/store";
+import { loadPromptTemplate } from "../observatory/prompt-template-loader";
+import {
+  readObservatorySddConfigMerged,
+  writeObservatorySddConfigMerged,
+} from "../observatory/observatory-sdd-config";
+import { observatorySddJsonAbs, sddFeatureObservatoryDirAbs } from "../observatory/sdd-test-paths";
+import {
+  processImpactAnalysis,
+  processTestCases,
+  readImpactAnalysisMarkdownForFeature,
+} from "../observatory/validation-pipeline";
 import { runSingleSddFeatureScan } from "../scanners/project-scanner";
 import { getDataModelAiPromptMarkdown } from "../observatory/project-onboarding";
 import { findAvailablePort } from "./port-utils";
+import { getGitInfoSummary } from "../observatory/git-info-summary";
+import { runPreflight } from "../observatory/preflight-resolver";
 
 export type GetStore = (workspaceRoot: string) => ObservatoryStore | undefined;
+
+/** 供 HTTP 仪表盘读取与 VS Code「部署默认服务」等一致的设置 */
+export type GetDeployExtensionSettings = (workspaceRoot: string) => {
+  defaultServiceList: string;
+  cheetahMcpService: string;
+};
 
 export class LocalServer {
   private httpServer?: http.Server;
@@ -29,7 +48,8 @@ export class LocalServer {
     private readonly getStore: GetStore,
     private readonly webviewDist: string | undefined,
     /** 已注册的多根工作区路径（供 Dashboard 项目切换） */
-    private readonly listWorkspaceRoots?: () => string[]
+    private readonly listWorkspaceRoots?: () => string[],
+    private readonly getDeployExtensionSettings?: GetDeployExtensionSettings
   ) {
     this.actualPort = requestedPort;
   }
@@ -66,6 +86,56 @@ export class LocalServer {
       res.status(code).type("json").send(JSON.stringify(data));
     };
 
+    app.get("/api/observatory/git-info", (req, res) => {
+      const root = pickRoot(req);
+      if (!root) {
+        err(res, "BAD_REQUEST", "missing ?root= workspace path", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      if (!this.getStore(workspaceRoot)) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      void (async () => {
+        try {
+          const data = await getGitInfoSummary(workspaceRoot);
+          sendJson(res, data);
+        } catch (e) {
+          err(res, "GIT_FAILED", String(e), 500);
+        }
+      })();
+    });
+
+    app.get("/api/observatory/preflight", (req, res) => {
+      const root = pickRoot(req);
+      if (!root) {
+        err(res, "BAD_REQUEST", "missing ?root= workspace path", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      if (!this.getStore(workspaceRoot)) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      const stage = String(req.query.stage ?? "analyze");
+      if (!/^[\w-]+$/.test(stage) || stage.length > 64) {
+        err(res, "BAD_REQUEST", "invalid ?stage=", 400);
+        return;
+      }
+      void (async () => {
+        try {
+          const data = await runPreflight(workspaceRoot, stage, {
+            id: "",
+            sdd: {},
+          });
+          sendJson(res, data);
+        } catch (e) {
+          err(res, "PREFLIGHT_FAILED", String(e), 500);
+        }
+      })();
+    });
+
     app.get("/api/observatory/workspace-roots", (_req, res) => {
       const raw = this.listWorkspaceRoots?.() ?? [];
       const roots = [...new Set(raw.map((p) => path.normalize(p)))].sort();
@@ -101,6 +171,29 @@ export class LocalServer {
         return decodeURIComponent(raw);
       }
       return undefined;
+    };
+
+    const pickFeature = (req: express.Request): string | undefined => {
+      const raw = req.query.feature ?? req.query.featureName;
+      if (typeof raw !== "string" || raw.length === 0 || raw.length > 256) {
+        return undefined;
+      }
+      if (raw.includes("..") || /[/\\]/.test(raw)) {
+        return undefined;
+      }
+      if (!/^[a-zA-Z0-9._-]+$/.test(raw)) {
+        return undefined;
+      }
+      return raw;
+    };
+
+    const safeUnderRoot = (
+      workspaceRoot: string,
+      candidate: string
+    ): boolean => {
+      const normRoot = path.resolve(workspaceRoot);
+      const norm = path.resolve(candidate);
+      return norm === normRoot || norm.startsWith(normRoot + path.sep);
     };
 
     const readObs = async (
@@ -204,6 +297,307 @@ export class LocalServer {
           err(res, "WRITE_FAILED", String(e), 500, {
             path: "test-expectations.json",
           });
+        }
+      })();
+    });
+
+    app.get("/api/observatory/sdd-config", (req, res) => {
+      const root = pickRoot(req);
+      const feature = pickFeature(req);
+      if (!root || !feature) {
+        err(res, "BAD_REQUEST", "missing ?root= or ?feature=", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      const store = this.getStore(workspaceRoot);
+      if (!store) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      const fp = observatorySddJsonAbs(workspaceRoot, feature);
+      if (!safeUnderRoot(workspaceRoot, fp)) {
+        err(res, "BAD_REQUEST", "invalid path", 400);
+        return;
+      }
+      void (async () => {
+        try {
+          const doc = await readObservatorySddConfigMerged(workspaceRoot, feature);
+          sendJson(res, doc);
+        } catch {
+          sendJson(res, {});
+        }
+      })();
+    });
+
+    app.put("/api/observatory/sdd-config", (req, res) => {
+      const root = pickRoot(req);
+      const feature = pickFeature(req);
+      if (!root || !feature) {
+        err(res, "BAD_REQUEST", "missing ?root= or ?feature=", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      const store = this.getStore(workspaceRoot);
+      if (!store) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      const body = req.body as Record<string, unknown>;
+      if (!body || typeof body !== "object") {
+        err(res, "BAD_REQUEST", "invalid body", 400);
+        return;
+      }
+      const fp = observatorySddJsonAbs(workspaceRoot, feature);
+      if (!safeUnderRoot(workspaceRoot, fp)) {
+        err(res, "BAD_REQUEST", "invalid path", 400);
+        return;
+      }
+      void (async () => {
+        try {
+          const prev = await readObservatorySddConfigMerged(workspaceRoot, feature);
+          const next = { ...prev, ...body };
+          await writeObservatorySddConfigMerged(workspaceRoot, feature, next);
+          this.broadcast({ type: "refresh", scope: "capabilities" });
+          sendJson(res, { ok: true, config: next });
+        } catch (e) {
+          err(res, "WRITE_FAILED", String(e), 500, { path: "observatory-sdd.json" });
+        }
+      })();
+    });
+
+    app.get("/api/observatory/deploy-settings", (req, res) => {
+      const root = pickRoot(req);
+      if (!root) {
+        err(res, "BAD_REQUEST", "missing ?root= workspace path", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      if (!this.getStore(workspaceRoot)) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      const get = this.getDeployExtensionSettings;
+      if (!get) {
+        sendJson(res, { defaultServiceList: "", cheetahMcpService: "" });
+        return;
+      }
+      sendJson(res, get(workspaceRoot));
+    });
+
+    app.get("/api/observatory/impact-analysis", (req, res) => {
+      const root = pickRoot(req);
+      const feature = pickFeature(req);
+      if (!root || !feature) {
+        err(res, "BAD_REQUEST", "missing ?root= or ?feature=", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      if (!this.getStore(workspaceRoot)) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      const fp = path.join(
+        sddFeatureObservatoryDirAbs(workspaceRoot, feature),
+        "impact-analysis.json"
+      );
+      if (!safeUnderRoot(workspaceRoot, fp)) {
+        err(res, "BAD_REQUEST", "invalid path", 400);
+        return;
+      }
+      void (async () => {
+        try {
+          const text = await fsp.readFile(fp, "utf8");
+          sendJson(res, JSON.parse(text) as unknown);
+        } catch {
+          err(res, "NOT_FOUND", "impact-analysis.json", 404);
+        }
+      })();
+    });
+
+    app.get("/api/observatory/impact-analysis-md", (req, res) => {
+      const root = pickRoot(req);
+      const feature = pickFeature(req);
+      if (!root || !feature) {
+        err(res, "BAD_REQUEST", "missing ?root= or ?feature=", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      if (!this.getStore(workspaceRoot)) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      const fp = path.join(
+        sddFeatureObservatoryDirAbs(workspaceRoot, feature),
+        "impact-analysis.md"
+      );
+      if (!safeUnderRoot(workspaceRoot, fp)) {
+        err(res, "BAD_REQUEST", "invalid path", 400);
+        return;
+      }
+      void (async () => {
+        try {
+          const markdown = await readImpactAnalysisMarkdownForFeature(
+            workspaceRoot,
+            feature
+          );
+          if (markdown === null) {
+            err(res, "NOT_FOUND", "impact-analysis.md", 404);
+            return;
+          }
+          sendJson(res, { markdown });
+        } catch {
+          err(res, "NOT_FOUND", "impact-analysis.md", 404);
+        }
+      })();
+    });
+
+    app.get("/api/observatory/test-cases-md", (req, res) => {
+      const root = pickRoot(req);
+      const feature = pickFeature(req);
+      if (!root || !feature) {
+        err(res, "BAD_REQUEST", "missing ?root= or ?feature=", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      if (!this.getStore(workspaceRoot)) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      const fp = path.join(
+        sddFeatureObservatoryDirAbs(workspaceRoot, feature),
+        "test-cases.md"
+      );
+      if (!safeUnderRoot(workspaceRoot, fp)) {
+        err(res, "BAD_REQUEST", "invalid path", 400);
+        return;
+      }
+      void (async () => {
+        try {
+          const markdown = await fsp.readFile(fp, "utf8");
+          sendJson(res, { markdown });
+        } catch {
+          err(res, "NOT_FOUND", "test-cases.md", 404);
+        }
+      })();
+    });
+
+    app.put("/api/observatory/impact-analysis", (req, res) => {
+      const root = pickRoot(req);
+      const feature = pickFeature(req);
+      if (!root || !feature) {
+        err(res, "BAD_REQUEST", "missing ?root= or ?feature=", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      if (!this.getStore(workspaceRoot)) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      void (async () => {
+        try {
+          const result = await processImpactAnalysis(
+            workspaceRoot,
+            feature,
+            req.body
+          );
+          if (!result.ok) {
+            err(res, "VALIDATION_FAILED", result.errors?.join("; ") ?? "validation failed", 400, {
+              errors: result.errors,
+            });
+            return;
+          }
+          this.broadcast({ type: "refresh", scope: "all" });
+          sendJson(res, {
+            ok: true,
+            ...(result.warnings?.length ? { warnings: result.warnings } : {}),
+          });
+        } catch (e) {
+          err(res, "WRITE_FAILED", String(e), 500);
+        }
+      })();
+    });
+
+    app.get("/api/observatory/test-cases", (req, res) => {
+      const root = pickRoot(req);
+      const feature = pickFeature(req);
+      if (!root || !feature) {
+        err(res, "BAD_REQUEST", "missing ?root= or ?feature=", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      if (!this.getStore(workspaceRoot)) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      const fp = path.join(
+        sddFeatureObservatoryDirAbs(workspaceRoot, feature),
+        "test-cases.json"
+      );
+      if (!safeUnderRoot(workspaceRoot, fp)) {
+        err(res, "BAD_REQUEST", "invalid path", 400);
+        return;
+      }
+      void (async () => {
+        try {
+          const text = await fsp.readFile(fp, "utf8");
+          sendJson(res, JSON.parse(text) as unknown);
+        } catch {
+          err(res, "NOT_FOUND", "test-cases.json", 404);
+        }
+      })();
+    });
+
+    app.put("/api/observatory/test-cases", (req, res) => {
+      const root = pickRoot(req);
+      const feature = pickFeature(req);
+      if (!root || !feature) {
+        err(res, "BAD_REQUEST", "missing ?root= or ?feature=", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      if (!this.getStore(workspaceRoot)) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      void (async () => {
+        try {
+          const result = await processTestCases(workspaceRoot, feature, req.body);
+          if (!result.ok) {
+            err(res, "VALIDATION_FAILED", result.errors?.join("; ") ?? "validation failed", 400, {
+              errors: result.errors,
+            });
+            return;
+          }
+          this.broadcast({ type: "refresh", scope: "all" });
+          sendJson(res, { ok: true });
+        } catch (e) {
+          err(res, "WRITE_FAILED", String(e), 500);
+        }
+      })();
+    });
+
+    app.get("/api/observatory/prompt-template/:stage", (req, res) => {
+      const root = pickRoot(req);
+      const stage = req.params.stage;
+      if (!root) {
+        err(res, "BAD_REQUEST", "missing ?root= workspace path", 400);
+        return;
+      }
+      if (typeof stage !== "string" || !/^[\w-]+$/.test(stage)) {
+        err(res, "BAD_REQUEST", "invalid stage", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      if (!this.getStore(workspaceRoot)) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      void (async () => {
+        try {
+          const { content, source } = await loadPromptTemplate(workspaceRoot, stage);
+          sendJson(res, { content, source });
+        } catch (e) {
+          err(res, "READ_FAILED", String(e), 500);
         }
       })();
     });

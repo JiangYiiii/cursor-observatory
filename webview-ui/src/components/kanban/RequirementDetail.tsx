@@ -1,5 +1,5 @@
 /**
- * 右列：需求详情 + SDD Prompt 操作。
+ * 右列：需求详情 + SDD Prompt 操作（V2 卡片编排）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { buildAiContextMarkdown } from "@/components/kanban/CapabilityDetail";
@@ -10,35 +10,62 @@ import {
 } from "@/lib/kanban-utils";
 import { formatDateTimeZhFull } from "@/lib/format-time";
 import {
+  computeImpactFreshness,
+  computeTestCasesFreshness,
+} from "@/lib/impact-freshness";
+import {
   formatTestSummaryForPrompt,
   generateAdvancePrompt,
   generateAnalyzePrompt,
   generateBugfixPrompt,
+  generateCheetahBranchWorkflowPrompt,
+  generateCodeSubmitPrompt,
+  generateDeployPrompt,
+  generateImpactAnalysisPrompt,
   generateImplementPrompt,
   generatePlanPrompt,
   generateReleasePrompt,
+  generateTapdStoryFetchPrompt,
   generateTasksPrompt,
+  generateTestCasesPrompt,
   generateTestPrompt,
 } from "@/lib/prompt-generators";
 import {
   getRelatedActivities,
   getTestStatsForCapability,
+  isTapdRequirementUrl,
+  mergeDeployServiceDisplayLine,
   resolveAdvanceKind,
 } from "@/lib/requirement-utils";
 import type {
   AiSession,
   Capability,
+  DataFreshness,
   Progress,
   TestExpectations,
   TestResults,
 } from "@/types/observatory";
-import { Check, Copy, Hash, RefreshCw } from "lucide-react";
+import type { PreflightResult } from "@/types/observatory";
+import { Check, Copy, Hash } from "lucide-react";
 import { sddFeatureDirName } from "@/lib/sdd-utils";
 import { getDataSource } from "@/services/data-source-instance";
 import { useObservatoryStore } from "@/store/observatory-store";
 import { copyToClipboard } from "@/lib/clipboard";
 import { PhaseBadge } from "./PhaseBadge";
 import { PromptDialog } from "./PromptDialog";
+import { MarkdownReviewDialog } from "./MarkdownReviewDialog";
+import {
+  ActivityCard,
+  BugTrackingCard,
+  CodeSubmitCard,
+  DeployCard,
+  DevTasksCard,
+  ImpactAnalysisCard,
+  RequirementUrlCard,
+  SddArtifactsCard,
+  TestCasesCard,
+  UtTestCard,
+} from "./cards";
 
 const META_KEYS = new Set([
   "id",
@@ -68,6 +95,26 @@ export function RequirementDetail({
   aiSessions,
 }: Props) {
   const refresh = useObservatoryStore((s) => s.refresh);
+  const loadRequirementPanel = useObservatoryStore(
+    (s) => s.loadRequirementPanel
+  );
+  const clearRequirementPanel = useObservatoryStore(
+    (s) => s.clearRequirementPanel
+  );
+  const saveSddConfigPartial = useObservatoryStore(
+    (s) => s.saveSddConfigPartial
+  );
+  const sddConfig = useObservatoryStore((s) => s.sddConfig);
+  const impactAnalysis = useObservatoryStore((s) => s.impactAnalysis);
+  const testCases = useObservatoryStore((s) => s.testCases);
+  const gitInfo = useObservatoryStore((s) => s.gitInfo);
+  const requirementPanelLoading = useObservatoryStore(
+    (s) => s.requirementPanelLoading
+  );
+  const requirementPanelFeature = useObservatoryStore(
+    (s) => s.requirementPanelFeature
+  );
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTitle, setDialogTitle] = useState("");
   const [dialogPrompt, setDialogPrompt] = useState("");
@@ -75,9 +122,82 @@ export function RequirementDetail({
   const [ctxCopied, setCtxCopied] = useState(false);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncErr, setSyncErr] = useState<string | null>(null);
+  const [swimlaneDraft, setSwimlaneDraft] = useState("");
+  const [deployServicesDraft, setDeployServicesDraft] = useState("");
+  const [deploySettings, setDeploySettings] = useState<{
+    defaultServiceList: string;
+    cheetahMcpService: string;
+  }>({ defaultServiceList: "", cheetahMcpService: "" });
+  const [sddSaveBusy, setSddSaveBusy] = useState(false);
+  const [preflight, setPreflight] = useState<PreflightResult | null>(null);
+  const [mdOpen, setMdOpen] = useState(false);
+  const [mdTitle, setMdTitle] = useState("");
+  const [mdContent, setMdContent] = useState("");
+  const [mdFreshness, setMdFreshness] = useState<DataFreshness | undefined>();
+
+  const feature = cap ? sddFeatureDirName(cap) : null;
 
   useEffect(() => {
     setSyncErr(null);
+  }, [cap?.id]);
+
+  useEffect(() => {
+    if (!cap?.sdd?.enabled || !feature) {
+      clearRequirementPanel();
+      setSwimlaneDraft("");
+      return;
+    }
+    void loadRequirementPanel(feature);
+  }, [cap?.id, cap?.sdd?.enabled, cap?.sdd?.workspacePath, feature, loadRequirementPanel, clearRequirementPanel]);
+
+  useEffect(() => {
+    const sl =
+      typeof sddConfig?.swimlane === "string" ? sddConfig.swimlane : "";
+    setSwimlaneDraft(sl);
+  }, [sddConfig?.swimlane, requirementPanelFeature, feature]);
+
+  useEffect(() => {
+    const raw =
+      typeof sddConfig?.deployServiceList === "string"
+        ? sddConfig.deployServiceList
+        : "";
+    setDeployServicesDraft(raw);
+  }, [sddConfig?.deployServiceList, requirementPanelFeature, feature]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getDataSource()
+      .getDeploySettings()
+      .then((d) => {
+        if (!cancelled) setDeploySettings(d);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDeploySettings({
+            defaultServiceList: "",
+            cheetahMcpService: "",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPreflight(null);
+    void getDataSource()
+      .getPreflight("impact-analysis")
+      .then((r) => {
+        if (!cancelled) setPreflight(r);
+      })
+      .catch(() => {
+        if (!cancelled) setPreflight(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [cap?.id]);
 
   const testStats = useMemo(() => {
@@ -105,9 +225,26 @@ export function RequirementDetail({
     );
   }, [cap, testStats]);
 
+  const impactScenariosBlock = useMemo(() => {
+    const ia = impactAnalysis;
+    if (!ia?.scenarios?.length) return undefined;
+    return ia.scenarios
+      .map(
+        (s) =>
+          `- **${s.id}** (${s.impact}) ${s.name}${s.description ? ` — ${s.description}` : ""}`
+      )
+      .join("\n");
+  }, [impactAnalysis]);
+
   const activities = useMemo(() => {
     if (!cap) return [];
-    return getRelatedActivities(cap.id, progress, aiSessions, 5);
+    return getRelatedActivities(cap.id, progress, aiSessions, 5).map((a) => ({
+      id: a.id,
+      kind: a.kind === "session" ? ("session" as const) : ("record" as const),
+      title: a.title,
+      subtitle: a.subtitle,
+      timestamp: a.timestamp,
+    }));
   }, [cap, progress, aiSessions]);
 
   const extra = useMemo(
@@ -132,6 +269,25 @@ export function RequirementDetail({
     setDialogOpen(true);
   }, []);
 
+  const openPromptAsync = useCallback(
+    async (title: string, gen: Promise<string>) => {
+      try {
+        const prompt = await gen;
+        openPrompt(title, prompt);
+      } catch (e) {
+        openPrompt(
+          title,
+          `生成 Prompt 失败：${e instanceof Error ? e.message : String(e)}`
+        );
+      }
+    },
+    [openPrompt]
+  );
+
+  const reloadPanel = useCallback(async () => {
+    if (feature) await loadRequirementPanel(feature);
+  }, [feature, loadRequirementPanel]);
+
   const handleSyncSdd = useCallback(async () => {
     if (!cap?.sdd?.enabled) return;
     const dir = sddFeatureDirName(cap);
@@ -141,12 +297,13 @@ export function RequirementDetail({
     try {
       await getDataSource().scanSddFeature(dir);
       await refresh("capabilities");
+      await reloadPanel();
     } catch (e) {
       setSyncErr(e instanceof Error ? e.message : String(e));
     } finally {
       setSyncBusy(false);
     }
-  }, [cap, refresh]);
+  }, [cap, refresh, reloadPanel]);
 
   const handleCopyContext = useCallback(async () => {
     if (!aiContextText) return;
@@ -157,17 +314,51 @@ export function RequirementDetail({
     }
   }, [aiContextText]);
 
-  if (!cap) {
-    return (
-      <div className="flex min-h-[240px] items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-zinc-50/50 p-6 text-center text-sm text-zinc-500 dark:border-zinc-600 dark:bg-zinc-900/20 dark:text-zinc-400">
-        点击左侧需求查看详情与 SDD 操作
-      </div>
-    );
-  }
+  const gitSnap = useMemo(() => {
+    if (!gitInfo) return null;
+    return {
+      branch: gitInfo.branch,
+      headCommit: gitInfo.headCommit,
+      workingTreeFingerprint: gitInfo.workingTreeFingerprint,
+    };
+  }, [gitInfo]);
 
-  const d = cap.sdd?.documents;
-  const ts = cap.sdd?.taskStats;
-  const phase = normalizePhase(cap.phase);
+  const impactFreshness = useMemo(
+    () => computeImpactFreshness(impactAnalysis, gitSnap),
+    [impactAnalysis, gitSnap]
+  );
+
+  const testCasesFreshness = useMemo(
+    () => computeTestCasesFreshness(testCases, impactAnalysis, gitSnap),
+    [testCases, impactAnalysis, gitSnap]
+  );
+
+  const changedFilesHint = useMemo(() => {
+    const files = impactAnalysis?.generated_from_changed_files;
+    if (files?.length) {
+      return files.map((f) => `- ${f}`).join("\n");
+    }
+    return "（扩展将在保存 JSON 时注入变更文件列表；若尚无文件列表，请结合当前 `git status` / `git diff` 分析。）";
+  }, [impactAnalysis]);
+
+  const affectedServicesLine = useMemo(() => {
+    const mods = impactAnalysis?.affected_modules?.filter((m) => m.is_application);
+    const names = mods?.length ? mods.map((m) => m.name) : undefined;
+    return mergeDeployServiceDisplayLine(
+      names,
+      deployServicesDraft,
+      deploySettings.defaultServiceList
+    );
+  }, [
+    impactAnalysis,
+    deployServicesDraft,
+    deploySettings.defaultServiceList,
+  ]);
+
+  // 以下派生值在 cap 为空时亦需计算，以便其后 useCallback 与「无选中」渲染路径的 hooks 数量一致（Rules of Hooks）
+  const d = cap?.sdd?.documents;
+  const ts = cap?.sdd?.taskStats;
+  const phase = normalizePhase(cap?.phase);
 
   const showPlan = Boolean(d?.spec && !d?.plan);
   const showTasks = Boolean(d?.plan && !d?.tasks);
@@ -179,19 +370,118 @@ export function RequirementDetail({
       (d?.tasks && ts && ts.total > 0 && ts.completed >= ts.total)
   );
   const showAnalyze = Boolean(d?.spec && d?.plan && d?.tasks);
-  const advanceKind = resolveAdvanceKind(cap);
+  const advanceKind = cap ? resolveAdvanceKind(cap) : ("implement" as const);
 
-  const docRow = d ? (
-    <div className="grid grid-cols-2 gap-1 text-[10px] text-zinc-700 dark:text-zinc-300 sm:grid-cols-4">
-      <span>{d.spec ? "✅" : "❌"} spec</span>
-      <span>{d.sketch ? "✅" : "❌"} sketch</span>
-      <span>{d.plan ? "✅" : "❌"} plan</span>
-      <span>{d.tasks ? "✅" : "❌"} tasks</span>
-      <span>{d.dataModel ? "✅" : "❌"} data-model</span>
-      <span>{d.contracts ? "✅" : "❌"} contracts</span>
-      <span>{d.research ? "✅" : "❌"} research</span>
-    </div>
-  ) : null;
+  const requirementUrl =
+    typeof sddConfig?.requirementUrl === "string"
+      ? sddConfig.requirementUrl
+      : "";
+
+  const cicd = preflight?.mcpStatus?.cicd;
+  const lego = preflight?.mcpStatus?.testRunner;
+  const cicdMcpStatus = cicd?.status === "configured" ? "configured" : (cicd?.status ?? "unknown");
+  const cicdMcpInfo = cicd
+    ? `${cicd.service ?? ""} · ${cicd.tool ?? ""}`
+    : "";
+  const legoMcpStatus = lego?.status === "configured" ? "configured" : (lego?.status ?? "unknown");
+  const legoMcpInfo = lego
+    ? `${lego.service ?? ""} · ${lego.tool ?? ""}`
+    : "";
+
+  const openImpactMd = useCallback(async () => {
+    if (!feature) return;
+    setMdTitle("影响分析（Markdown）");
+    setMdFreshness(impactFreshness === "fresh" ? "fresh" : "stale");
+    try {
+      const md =
+        (await getDataSource().getImpactAnalysisMd(feature)) ??
+        "（暂无 impact-analysis.md）";
+      setMdContent(md);
+      setMdOpen(true);
+    } catch {
+      setMdContent("读取失败");
+      setMdOpen(true);
+    }
+  }, [feature, impactFreshness]);
+
+  const openTestCasesMd = useCallback(async () => {
+    if (!feature) return;
+    setMdTitle("测试用例（Markdown）");
+    setMdFreshness(testCasesFreshness === "fresh" ? "fresh" : "stale");
+    try {
+      const md =
+        (await getDataSource().getTestCasesMd(feature)) ??
+        "（暂无 test-cases.md）";
+      setMdContent(md);
+      setMdOpen(true);
+    } catch {
+      setMdContent("读取失败");
+      setMdOpen(true);
+    }
+  }, [feature, testCasesFreshness]);
+
+  const handleSaveRequirementUrl = useCallback(
+    async (next: string) => {
+      if (!feature) return;
+      await saveSddConfigPartial(feature, { requirementUrl: next });
+    },
+    [feature, saveSddConfigPartial]
+  );
+
+  const handleSaveSwimlaneBlur = useCallback(async () => {
+    if (!feature) return;
+    setSddSaveBusy(true);
+    try {
+      await saveSddConfigPartial(feature, { swimlane: swimlaneDraft.trim() });
+    } finally {
+      setSddSaveBusy(false);
+    }
+  }, [feature, saveSddConfigPartial, swimlaneDraft]);
+
+  const handleSaveDeployServicesBlur = useCallback(async () => {
+    if (!feature) return;
+    setSddSaveBusy(true);
+    try {
+      await saveSddConfigPartial(feature, {
+        deployServiceList: deployServicesDraft.trim(),
+      });
+    } finally {
+      setSddSaveBusy(false);
+    }
+  }, [feature, saveSddConfigPartial, deployServicesDraft]);
+
+  const handleCopyTapdFetchPrompt = useCallback(async () => {
+    const u = requirementUrl.trim();
+    if (!u) return;
+    await copyToClipboard(generateTapdStoryFetchPrompt(u));
+  }, [requirementUrl]);
+
+  const handleCopyBranchWorkflowPrompt = useCallback(async () => {
+    if (!feature) return;
+    const u = requirementUrl.trim();
+    if (!u) return;
+    await copyToClipboard(
+      generateCheetahBranchWorkflowPrompt({
+        requirementUrl: u,
+        featureDir: feature,
+        currentBranch: gitInfo?.branch ?? "",
+        cheetahMcpService: deploySettings.cheetahMcpService,
+      })
+    );
+  }, [
+    feature,
+    requirementUrl,
+    gitInfo?.branch,
+    deploySettings.cheetahMcpService,
+  ]);
+
+  if (!cap) {
+    return (
+      <div className="flex min-h-[240px] items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-zinc-50/50 p-6 text-center text-sm text-zinc-500 dark:border-zinc-600 dark:bg-zinc-900/20 dark:text-zinc-400">
+        点击左侧需求查看详情与 SDD 操作
+      </div>
+    );
+  }
 
   return (
     <>
@@ -220,9 +510,11 @@ export function RequirementDetail({
               <button
                 type="button"
                 onClick={() =>
-                  openPrompt(
+                  void openPromptAsync(
                     "推进需求",
-                    generateAdvancePrompt(cap, testSummaryLine)
+                    generateAdvancePrompt(cap, testSummaryLine, {
+                      impactScenariosBlock,
+                    })
                   )
                 }
                 className="rounded-md bg-violet-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-violet-700"
@@ -241,17 +533,6 @@ export function RequirementDetail({
                 )}
                 复制上下文
               </button>
-              {showAnalyze ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    openPrompt("产物分析", generateAnalyzePrompt(cap))
-                  }
-                  className="rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
-                >
-                  产物分析
-                </button>
-              ) : null}
               {advanceKind === "release" || phase === "completed" ? (
                 <button
                   type="button"
@@ -267,203 +548,176 @@ export function RequirementDetail({
           </div>
         </header>
 
+        {cap.sdd?.enabled && feature ? (
+          <RequirementUrlCard
+            requirementUrl={requirementUrl}
+            busy={sddSaveBusy}
+            onSave={handleSaveRequirementUrl}
+            showTapdActions={isTapdRequirementUrl(requirementUrl)}
+            onCopyTapdFetchPrompt={() => void handleCopyTapdFetchPrompt()}
+            onCopyBranchWorkflowPrompt={() =>
+              void handleCopyBranchWorkflowPrompt()
+            }
+          />
+        ) : null}
+
         {cap.sdd?.enabled ? (
-          <section className="rounded-lg border border-zinc-200 bg-zinc-50/50 p-3 dark:border-zinc-600 dark:bg-zinc-900/30">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
-                SDD 产物
-              </h3>
-              <div className="flex flex-wrap items-center gap-1">
-                {sddFeatureDirName(cap) ? (
-                  <button
-                    type="button"
-                    disabled={syncBusy}
-                    onClick={() => void handleSyncSdd()}
-                    title="仅重新扫描本需求对应 specs 目录并更新看板（不跑全量架构/Git 扫描）"
-                    className="inline-flex items-center gap-1 rounded bg-zinc-200/80 px-2 py-1 text-[10px] font-medium text-zinc-800 hover:bg-zinc-300/90 disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-600"
-                  >
-                    <RefreshCw
-                      className={`size-3 ${syncBusy ? "animate-spin" : ""}`}
-                      aria-hidden
-                    />
-                    同步
-                  </button>
-                ) : null}
-                {showPlan ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openPrompt("设计方案", generatePlanPrompt(cap))
-                    }
-                    className="rounded bg-white px-2 py-1 text-[10px] font-medium text-zinc-800 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
-                  >
-                    设计方案
-                  </button>
-                ) : null}
-                {showTasks ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openPrompt("拆解任务", generateTasksPrompt(cap))
-                    }
-                    className="rounded bg-white px-2 py-1 text-[10px] font-medium text-zinc-800 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
-                  >
-                    拆解任务
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            {syncErr ? (
-              <p className="mb-2 text-[10px] text-red-600 dark:text-red-400">
-                {syncErr}
-              </p>
-            ) : null}
-            <p className="mb-2 font-mono text-[10px] text-zinc-500">
-              {cap.sdd.workspacePath}
-            </p>
-            {cap.sdd.specAuthor ? (
-              <p className="mb-2 text-[10px] text-zinc-600 dark:text-zinc-400">
-                Spec 创建者：{" "}
-                <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                  {cap.sdd.specAuthor}
-                </span>
-              </p>
-            ) : null}
-            {docRow}
-            {cap.sdd.phaseDeclaredInObservatorySdd ? (
-              <p className="mt-2 text-[10px] text-sky-800 dark:text-sky-200">
-                阶段由 observatory-sdd.json 的 declaredPhase 声明（全量扫描保留）
-              </p>
-            ) : null}
-            {cap.sdd.skipTestingAfterTasks ? (
-              <p className="mt-2 text-[10px] text-emerald-800 dark:text-emerald-200">
-                已声明：任务完成后跳过单独测试阶段
-              </p>
-            ) : null}
-          </section>
+          <SddArtifactsCard
+            cap={cap}
+            syncBusy={syncBusy}
+            syncErr={syncErr}
+            showPlan={showPlan}
+            showTasks={showTasks}
+            showAnalyze={showAnalyze}
+            onSync={handleSyncSdd}
+            onPlan={() => openPrompt("设计方案", generatePlanPrompt(cap))}
+            onTasks={() => openPrompt("拆解任务", generateTasksPrompt(cap))}
+            onAnalyze={() =>
+              void openPromptAsync("产物分析", generateAnalyzePrompt(cap))
+            }
+          />
         ) : null}
 
-        {ts && ts.total > 0 ? (
-          <section className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-600">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                开发任务
-              </h3>
-              {showImplement ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    openPrompt("继续开发", generateImplementPrompt(cap))
-                  }
-                  className="rounded-md bg-amber-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-amber-700"
-                >
-                  继续开发
-                </button>
-              ) : null}
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-700">
-              <div
-                className="h-full rounded-full bg-violet-500 transition-[width]"
-                style={{
-                  width: `${Math.round((ts.completed / Math.max(ts.total, 1)) * 100)}%`,
-                }}
-              />
-            </div>
-            <p className="mt-1 text-[10px] text-zinc-500">
-              {ts.completed}/{ts.total} 已完成
-            </p>
-          </section>
+        <DevTasksCard
+          cap={cap}
+          showImplement={showImplement}
+          onImplement={() =>
+            openPrompt("继续开发", generateImplementPrompt(cap))
+          }
+        />
+
+        {cap.sdd?.enabled && feature ? (
+          <ImpactAnalysisCard
+            impact={impactAnalysis}
+            freshness={impactFreshness}
+            loading={requirementPanelLoading}
+            onAnalyze={() =>
+              openPrompt(
+                "影响场景分析",
+                generateImpactAnalysisPrompt(cap, changedFilesHint)
+              )
+            }
+            onReanalyze={() =>
+              openPrompt(
+                "影响场景分析",
+                generateImpactAnalysisPrompt(cap, changedFilesHint)
+              )
+            }
+            onViewDetail={() => void openImpactMd()}
+          />
         ) : null}
 
-        <section className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-600">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              测试状态
-            </h3>
-            {showTest ? (
-              <button
-                type="button"
-                onClick={() =>
-                  openPrompt("执行测试", generateTestPrompt(cap, testSummaryLine))
-                }
-                className="rounded-md bg-orange-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-orange-700"
-              >
-                执行测试
-              </button>
-            ) : null}
-          </div>
-          <p className="text-xs text-zinc-600 dark:text-zinc-300">
-            用例：通过 {testStats.passed} / 失败 {testStats.failed} / 总计{" "}
-            {testStats.total}
-          </p>
-          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
-            场景覆盖：{testStats.scenarioCovered}/{testStats.scenarioExpected}
-          </p>
-        </section>
+        <UtTestCard
+          showTest={showTest}
+          testStats={testStats}
+          impactScenarioTotal={impactAnalysis?.summary?.total_scenarios ?? 0}
+          impactFreshness={impactFreshness}
+          onRunTest={() =>
+            openPrompt(
+              "执行测试",
+              generateTestPrompt(cap, testSummaryLine, {
+                impactScenariosBlock,
+              })
+            )
+          }
+        />
 
-        <section className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-600">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              Bug 追踪
-            </h3>
-            <button
-              type="button"
-              onClick={() =>
-                openPrompt(
-                  "Bug 修复",
-                  generateBugfixPrompt(cap, bugDraft.trim() || undefined)
-                )
-              }
-              className="rounded-md bg-red-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-red-700"
-            >
-              Bug 修复
-            </button>
-          </div>
-          <p className="text-xs text-zinc-600 dark:text-zinc-300">
-            未关闭：{cap.bugfix?.activeBugs ?? 0} · 已关闭：
-            {cap.bugfix?.resolvedBugs ?? 0}
-          </p>
-          {cap.bugfix?.rootCauses?.length ? (
-            <p className="mt-1 text-[10px] text-zinc-500">
-              根因：{cap.bugfix.rootCauses.join(", ")}
-            </p>
-          ) : null}
-          <label className="mt-2 block text-[10px] text-zinc-500">
-            新 Bug 描述（可选；留空则按 bugfix-log 中 OPEN 项修复）
-            <textarea
-              value={bugDraft}
-              onChange={(e) => setBugDraft(e.target.value)}
-              rows={2}
-              className="mt-1 w-full rounded border border-zinc-200 bg-white p-1.5 text-xs text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
-              placeholder="现象、复现步骤…"
-            />
-          </label>
-        </section>
+        <CodeSubmitCard
+          lastCommitLine={gitInfo?.lastCommitLine ?? null}
+          onSubmitCode={() =>
+            openPrompt(
+              "提交代码",
+              generateCodeSubmitPrompt(cap, requirementUrl)
+            )
+          }
+        />
 
-        {activities.length > 0 ? (
-          <section className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-600">
-            <h3 className="mb-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              相关活动
-            </h3>
-            <ul className="space-y-2 text-xs text-zinc-600 dark:text-zinc-300">
-              {activities.map((a) => (
-                <li key={a.id} className="border-l-2 border-zinc-200 pl-2 dark:border-zinc-600">
-                  <span className="font-medium text-zinc-700 dark:text-zinc-200">
-                    {a.kind === "session" ? "会话" : "记录"} · {a.title}
-                  </span>
-                  {a.subtitle ? (
-                    <span className="ml-1 text-[10px] text-zinc-400">
-                      {a.subtitle}
-                    </span>
-                  ) : null}
-                  <div className="text-[10px] text-zinc-400">
-                    {formatDateTimeZhFull(a.timestamp)}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
+        {cap.sdd?.enabled && feature ? (
+          <DeployCard
+            branch={gitInfo?.branch ?? ""}
+            swimlaneDraft={swimlaneDraft}
+            onSwimlaneDraftChange={setSwimlaneDraft}
+            onBlurSaveSwimlane={handleSaveSwimlaneBlur}
+            saving={sddSaveBusy}
+            affectedServicesLine={affectedServicesLine}
+            deployServicesDraft={deployServicesDraft}
+            onDeployServicesDraftChange={setDeployServicesDraft}
+            onBlurSaveDeployServices={handleSaveDeployServicesBlur}
+            extensionDefaultServices={deploySettings.defaultServiceList}
+            impactFreshness={impactFreshness}
+            preflight={preflight}
+            onDeployPrompt={() =>
+              openPrompt(
+                "环境部署",
+                generateDeployPrompt({
+                  cap,
+                  currentBranch: gitInfo?.branch ?? "",
+                  swimlane: swimlaneDraft,
+                  affectedServices: affectedServicesLine,
+                  cicdMcpStatus,
+                  cicdMcpInfo,
+                  impactFreshness: String(impactFreshness),
+                })
+              )
+            }
+          />
         ) : null}
+
+        {cap.sdd?.enabled && feature ? (
+          <TestCasesCard
+            tests={testCases}
+            freshness={testCasesFreshness}
+            preflight={preflight}
+            onGeneratePrompt={() =>
+              openPrompt(
+                "测试用例",
+                generateTestCasesPrompt({
+                  cap,
+                  impactScenarios: impactScenariosBlock ?? "（无）",
+                  legoMcpStatus,
+                  legoMcpInfo,
+                })
+              )
+            }
+            onRerunFailedPrompt={() =>
+              openPrompt(
+                "重跑失败用例",
+                `${generateTestCasesPrompt({
+                  cap,
+                  impactScenarios: impactScenariosBlock ?? "（无）",
+                  legoMcpStatus,
+                  legoMcpInfo,
+                })}\n\n## 仅重跑\n请仅对 status=failed 的用例重新执行 MCP/接口并更新 test-cases.json。`
+              )
+            }
+            onContinuePendingPrompt={() =>
+              openPrompt(
+                "继续执行用例",
+                `${generateTestCasesPrompt({
+                  cap,
+                  impactScenarios: impactScenariosBlock ?? "（无）",
+                  legoMcpStatus,
+                  legoMcpInfo,
+                })}\n\n## 继续执行\n请仅对 status=pending 的用例执行并更新 JSON。`
+              )
+            }
+            onViewDetail={() => void openTestCasesMd()}
+          />
+        ) : null}
+
+        <BugTrackingCard
+          cap={cap}
+          bugDraft={bugDraft}
+          onBugDraftChange={setBugDraft}
+          onBugfix={() =>
+            openPrompt(
+              "Bug 修复",
+              generateBugfixPrompt(cap, bugDraft.trim() || undefined)
+            )
+          }
+        />
+
+        <ActivityCard activities={activities} />
       </div>
 
       <PromptDialog
@@ -471,6 +725,14 @@ export function RequirementDetail({
         title={dialogTitle}
         prompt={dialogPrompt}
         onClose={() => setDialogOpen(false)}
+      />
+
+      <MarkdownReviewDialog
+        open={mdOpen}
+        title={mdTitle}
+        markdownContent={mdContent}
+        freshness={mdFreshness}
+        onClose={() => setMdOpen(false)}
       />
     </>
   );

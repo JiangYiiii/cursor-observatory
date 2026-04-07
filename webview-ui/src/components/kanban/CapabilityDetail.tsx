@@ -189,13 +189,13 @@ export function CapabilityDetail({ capability: cap, onClose }: Props) {
               <div className="grid grid-cols-2 gap-1 text-[10px] text-zinc-700 dark:text-zinc-300">
                 {(
                   [
-                    ["spec.md", cap.sdd.documents.spec],
-                    ["sketch.md", cap.sdd.documents.sketch],
-                    ["plan.md", cap.sdd.documents.plan],
-                    ["tasks.md", cap.sdd.documents.tasks],
-                    ["data-model.md", cap.sdd.documents.dataModel],
-                    ["contracts/", cap.sdd.documents.contracts],
-                    ["research.md", cap.sdd.documents.research],
+                    ["spec.md", cap.sdd.documents?.spec],
+                    ["sketch.md", cap.sdd.documents?.sketch],
+                    ["plan.md", cap.sdd.documents?.plan],
+                    ["tasks.md", cap.sdd.documents?.tasks],
+                    ["data-model.md", cap.sdd.documents?.dataModel],
+                    ["contracts/", cap.sdd.documents?.contracts],
+                    ["research.md", cap.sdd.documents?.research],
                   ] as const
                 ).map(([label, ok]) => (
                   <span key={label}>

@@ -316,3 +316,127 @@ export type UpdateEvent = {
 };
 
 export type Unsubscribe = () => void;
+
+// --- 需求面板 V2（specs/<feature>/observatory-sdd.json & observatory/*.json）---
+
+export type DataFreshness = "fresh" | "stale" | "missing" | "invalid";
+
+export type SkillStatus = "found" | "missing" | "invalid";
+
+export type McpStatus =
+  | "configured"
+  | "service_missing"
+  | "tool_missing"
+  | "malformed";
+
+/** specs/<feature>/observatory/observatory-sdd.json（兼容旧路径 specs/<feature>/observatory-sdd.json）中与需求级缓存相关的字段 */
+export interface ObservatorySddConfig extends Record<string, unknown> {
+  schema_version?: string;
+  requirementUrl?: string;
+  swimlane?: string;
+  /** 英文逗号分隔；与扩展「默认服务列表」合并，用于部署卡片在影响分析为空时的展示 */
+  deployServiceList?: string;
+  declaredPhase?: string;
+}
+
+export interface ImpactScenario {
+  id: string;
+  name: string;
+  impact: "high" | "medium" | "low";
+  anchor_id?: string;
+  description?: string;
+  related_files: string[];
+  module: string;
+}
+
+export interface AffectedModule {
+  name: string;
+  path: string;
+  is_application: boolean;
+  entry_class?: string;
+  scenario_count: number;
+  scenario_ids?: string[];
+}
+
+export interface ChangedFile {
+  path: string;
+  change_type: "modified" | "added" | "deleted";
+  module: string;
+  has_ai_doc?: boolean;
+  anchor_ids?: string[];
+}
+
+export interface ImpactAnalysisSummary {
+  total_scenarios: number;
+  high_impact: number;
+  medium_impact: number;
+  low_impact: number;
+  affected_modules: number;
+  affected_applications: number;
+}
+
+export interface ImpactAnalysisResult extends SchemaVersioned {
+  analyzed_at: string;
+  base_ref: string;
+  workspace_branch: string;
+  head_commit: string;
+  working_tree_fingerprint: string;
+  generated_from_changed_files: string[];
+  summary: ImpactAnalysisSummary;
+  scenarios: ImpactScenario[];
+  affected_modules: AffectedModule[];
+  changed_files: ChangedFile[];
+}
+
+export interface TestCasesSummary {
+  total_scenarios: number;
+  generated_cases: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+}
+
+export interface TestCaseEntry {
+  id: string;
+  scenario_id: string;
+  scenario_name: string;
+  description: string;
+  request: Record<string, unknown>;
+  expected: Record<string, unknown>;
+  actual?: Record<string, unknown>;
+  redacted_fields?: string[];
+  status: "passed" | "failed" | "skipped" | "pending";
+  error_message?: string;
+}
+
+export interface TestCasesResult extends SchemaVersioned {
+  executed_at: string;
+  source_impact_analysis_head_commit: string;
+  source_impact_analysis_fingerprint: string;
+  workspace_branch: string;
+  head_commit: string;
+  working_tree_fingerprint: string;
+  summary: TestCasesSummary;
+  cases: TestCaseEntry[];
+}
+
+/** 与扩展 `runPreflight` / `resolveSkillStatus` 返回一致 */
+export interface SkillStatusEntry {
+  status: SkillStatus;
+  path?: string;
+}
+
+export interface McpStatusEntry {
+  status: McpStatus;
+  service?: string;
+  tool?: string;
+}
+
+export interface PreflightResult {
+  skillStatus: Record<string, SkillStatusEntry>;
+  mcpStatus: {
+    cicd: McpStatusEntry;
+    testRunner: McpStatusEntry;
+  };
+  dataFreshness: Record<string, DataFreshness>;
+}

@@ -9,6 +9,7 @@ import type {
   DataModels,
   DocsHealth,
   Manifest,
+  PreflightResult,
   Progress,
   SessionDetail,
   SessionIndex,
@@ -222,5 +223,86 @@ export class CursorBridgeDataSource implements IDataSource {
     updates: Partial<Capability>
   ): Promise<void> {
     await this.request<void>("updateCapability", { id, updates });
+  }
+
+  async getSddConfig(feature: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>("getSddConfig", { feature });
+  }
+
+  async saveSddConfig(
+    feature: string,
+    partial: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>("saveSddConfig", {
+      feature,
+      partial,
+    });
+  }
+
+  async getImpactAnalysis(feature: string): Promise<unknown | null> {
+    return this.request<unknown | null>("getImpactAnalysis", { feature });
+  }
+
+  async saveImpactAnalysis(
+    feature: string,
+    body: unknown
+  ): Promise<{ warnings?: string[] }> {
+    return this.request<{ warnings?: string[] }>("saveImpactAnalysis", {
+      feature,
+      body,
+    });
+  }
+
+  async getTestCasesResult(feature: string): Promise<unknown | null> {
+    return this.request<unknown | null>("getTestCasesResult", { feature });
+  }
+
+  async saveTestCasesResult(feature: string, body: unknown): Promise<void> {
+    await this.request<void>("saveTestCasesResult", { feature, body });
+  }
+
+  async getPromptTemplate(
+    stage: string
+  ): Promise<{ content: string; source: string }> {
+    return this.request<{ content: string; source: string }>(
+      "getPromptTemplate",
+      { stage }
+    );
+  }
+
+  async getGitInfo(): Promise<{
+    branch: string;
+    headCommit: string;
+    workingTreeFingerprint: string;
+    lastCommitLine: string | null;
+  }> {
+    return this.request<{
+      branch: string;
+      headCommit: string;
+      workingTreeFingerprint: string;
+      lastCommitLine: string | null;
+    }>("getGitInfo");
+  }
+
+  async getImpactAnalysisMd(feature: string): Promise<string | null> {
+    return this.request<string | null>("getImpactAnalysisMd", { feature });
+  }
+
+  async getTestCasesMd(feature: string): Promise<string | null> {
+    return this.request<string | null>("getTestCasesMd", { feature });
+  }
+
+  async getPreflight(stage: string): Promise<PreflightResult> {
+    return this.request<PreflightResult>("getPreflight", { stage });
+  }
+
+  async getDeploySettings(): Promise<{
+    defaultServiceList: string;
+    cheetahMcpService: string;
+  }> {
+    return this.request<{
+      defaultServiceList: string;
+      cheetahMcpService: string;
+    }>("getDeploySettings");
   }
 }

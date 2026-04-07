@@ -17,6 +17,7 @@
 | **能力阶段** | 结合会话文本推断设计/开发/测试；测试结果导入可触发「测试中→已完成」；Git 提交说明可标记「已发布」 |
 | **数据模型引导** | 生成 `DATA_MODEL_AI_PROMPT.md`，便于让 AI 输出符合契约的 `data-models.json` |
 | **质量** | 导入 pytest JSON、JUnit XML、规范化 `report.json`，更新测试结果、能力映射与历史 |
+| **SDD 需求面板** | 选中 SDD 能力后右侧卡片：需求链接（TAPD 时 MCP 提示）、`specs/<feature>/observatory/` 下影响分析与测试用例、`observatory-sdd.json` 配置与部署服务列表 |
 
 ---
 
@@ -75,7 +76,11 @@
 
 **Git 与「已发布」**：提交说明中单独一行写 `Observatory: cap-id-one,cap-id-two` 或 `能力: cap-id-one,cap-id-two`，扩展可将对应能力标为 **released**。
 
-**SDD 显式阶段**：在 `specs/<feature>/observatory-sdd.json` 中可设置 `declaredPhase`（`planning`～`deprecated`），**优先于**由 spec/plan/tasks 推断的阶段；全量扫描会写入看板并保持该值。
+**SDD 显式阶段**：在 `specs/<feature>/observatory/observatory-sdd.json`（兼容旧路径 `specs/<feature>/observatory-sdd.json`）中可设置 `declaredPhase`（`planning`～`deprecated`），**优先于**由 spec/plan/tasks 推断的阶段；全量扫描会写入看板并保持该值。
+
+**部署默认服务**：设置 **`observatory.deploy.defaultServiceList`**（英文逗号分隔）后，与需求面板中手工填写的 **`deployServiceList`** 合并，在影响分析未列出应用服务时仍可用于部署 Prompt。
+
+**Cheetah MCP**：设置 **`observatory.mcp.cheetah`** 为服务名后，TAPD 链接旁的「分支工作流」复制内容会引用该标识。
 
 ---
 

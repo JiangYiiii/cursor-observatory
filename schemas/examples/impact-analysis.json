@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "analyzed_at": "2026-04-07T12:00:00.000Z",
+  "base_ref": "abc123def456",
+  "workspace_branch": "feature/example",
+  "head_commit": "deadbeef",
+  "working_tree_fingerprint": "sha256:example",
+  "generated_from_changed_files": ["src/Foo.java"],
+  "summary": {
+    "total_scenarios": 1,
+    "high_impact": 1,
+    "medium_impact": 0,
+    "low_impact": 0,
+    "affected_modules": 1,
+    "affected_applications": 1
+  },
+  "scenarios": [
+    {
+      "id": "SCENARIO_001",
+      "name": "示例场景",
+      "impact": "high",
+      "description": "示例",
+      "related_files": ["src/Foo.java"],
+      "module": "demo"
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "demo",
+      "path": "demo",
+      "is_application": true,
+      "entry_class": "DemoApplication.java",
+      "scenario_count": 1,
+      "scenario_ids": ["SCENARIO_001"]
+    }
+  ],
+  "changed_files": [
+    {
+      "path": "src/Foo.java",
+      "change_type": "modified",
+      "module": "demo",
+      "has_ai_doc": false,
+      "anchor_ids": []
+    }
+  ]
+}

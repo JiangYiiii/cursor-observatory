@@ -1,7 +1,7 @@
 {
   "name": "cursor-observatory",
   "displayName": "Cursor Observatory",
-  "description": "AI 开发可观测：能力阶段推断、Agent 转录、数据模型 AI 引导、仪表盘与 .observatory 数据层。AI dev observability: capability phases, transcripts, data-model prompts, dashboard.",
+  "description": "AI 开发可观测：SDD 需求面板、影响分析/测试用例校验、泳道部署提示、能力阶段与 Agent 转录、数据模型引导、.observatory 数据层与仪表盘。AI dev observability: SDD requirement panel, impact analysis, deploy prompts, capability phases, transcripts, dashboard.",
   "version": "0.1.0",
   "publisher": "cursor-observatory",
   "license": "MIT",
@@ -170,6 +170,51 @@
           "default": true,
           "description": "Deprecated: use observatory.test.autoIngestTestReport.",
           "deprecationMessage": "Renamed to observatory.test.autoIngestTestReport"
+        },
+        "observatory.prompt.templateDir": {
+          "type": "string",
+          "default": "",
+          "description": "自定义 prompt 模板目录路径，支持 ${workspaceFolder}。目录下按阶段命名：specify.md、plan.md、tasks.md、implement.md、analyze.md、impact-analysis.md、ut-test.md、code-submit.md、deploy.md、test-case.md。未找到则使用内置默认。"
+        },
+        "observatory.skill.analyze": {
+          "type": "string",
+          "default": "",
+          "description": "SDD analyze skill 路径，如 .cursor/skills/analyze/SKILL.md。留空时自动检测项目中的 skill，仍无则使用内置默认 prompt。"
+        },
+        "observatory.skill.codeSubmit": {
+          "type": "string",
+          "default": "",
+          "description": "code-submit skill 路径。留空时自动检测项目中的 skill，仍无则使用内置默认 prompt。"
+        },
+        "observatory.mcp.cicd": {
+          "type": "string",
+          "default": "",
+          "description": "CICD MCP 服务名，如 cicd-feature-branch。仅保存服务标识，不保存 token 或完整 URL。"
+        },
+        "observatory.mcp.testRunner": {
+          "type": "string",
+          "default": "",
+          "description": "测试执行 MCP 服务名，如 lego。仅保存服务标识，不保存 token 或完整 URL。"
+        },
+        "observatory.mcp.cicdTool": {
+          "type": "string",
+          "default": "swimlane_deploy",
+          "description": "CICD MCP 默认调用工具名。"
+        },
+        "observatory.mcp.cheetah": {
+          "type": "string",
+          "default": "",
+          "description": "Cheetah（泳道/OpenAPI）MCP 服务名，供需求面板「分支工作流」提示中的 AI 使用；仅标识名，不含密钥。"
+        },
+        "observatory.deploy.defaultServiceList": {
+          "type": "string",
+          "default": "",
+          "description": "环境部署卡片默认影响服务列表（英文逗号分隔）。当影响分析未扫到应用服务时，与需求级手工列表合并展示。"
+        },
+        "observatory.mcp.testRunnerTool": {
+          "type": "string",
+          "default": "run_test_case",
+          "description": "测试执行 MCP 默认调用工具名。"
         }
       }
     }

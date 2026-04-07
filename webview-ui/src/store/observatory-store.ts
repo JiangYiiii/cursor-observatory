@@ -21,9 +21,12 @@ import type {
   CapabilityPhase,
   DataModels,
   DocsHealth,
+  ImpactAnalysisResult,
   Manifest,
+  ObservatorySddConfig,
   Progress,
   SessionIndex,
+  TestCasesResult,
   TestExpectations,
   TestHistoryEntry,
   TestMapping,
@@ -37,6 +40,14 @@ export type WsConnectionStatus =
   | "connected"
   | "disconnected"
   | "error";
+
+/** 需求详情面板缓存的 Git 摘要（与 `getGitInfo` 一致） */
+export type GitInfoSnapshot = {
+  branch: string;
+  headCommit: string;
+  workingTreeFingerprint: string;
+  lastCommitLine: string | null;
+};
 
 export type RefreshScope =
   | "all"
@@ -70,6 +81,15 @@ interface ObservatoryState {
   docsHealth: DocsHealth | null;
   sessionIndex: SessionIndex | null;
 
+  /** 当前选中需求对应的 specs 目录名（feature） */
+  requirementPanelFeature: string | null;
+  sddConfig: ObservatorySddConfig | null;
+  impactAnalysis: ImpactAnalysisResult | null;
+  testCases: TestCasesResult | null;
+  gitInfo: GitInfoSnapshot | null;
+  requirementPanelLoading: boolean;
+  requirementPanelError: string | null;
+
   _unsub?: () => void;
 
   loadAll: () => Promise<void>;
@@ -79,6 +99,14 @@ interface ObservatoryState {
   switchWorkspace: (workspaceRoot: string) => Promise<void>;
   /** 拖拽或编辑后更新能力阶段（先本地，再异步持久化） */
   setCapabilityPhase: (id: string, phase: CapabilityPhase) => void;
+
+  /** 加载 specs/<feature>/ 下 observatory 相关 JSON + Git 摘要 */
+  loadRequirementPanel: (feature: string) => Promise<void>;
+  clearRequirementPanel: () => void;
+  saveSddConfigPartial: (
+    feature: string,
+    partial: Record<string, unknown>
+  ) => Promise<void>;
 }
 
 export const useObservatoryStore = create<ObservatoryState>((set, get) => {
@@ -186,6 +214,14 @@ export const useObservatoryStore = create<ObservatoryState>((set, get) => {
     dataModels: null,
     docsHealth: null,
     sessionIndex: null,
+
+    requirementPanelFeature: null,
+    sddConfig: null,
+    impactAnalysis: null,
+    testCases: null,
+    gitInfo: null,
+    requirementPanelLoading: false,
+    requirementPanelError: null,
 
     loadAll: async () => {
       const ds = getDataSource();
@@ -306,6 +342,60 @@ export const useObservatoryStore = create<ObservatoryState>((set, get) => {
         .catch(() => {
           /* 已写入本地；Bridge 无 workspace 或 API 失败时仍保留看板状态 */
         });
+    },
+
+    loadRequirementPanel: async (feature: string) => {
+      if (!feature) return;
+      const ds = getDataSource();
+      set({
+        requirementPanelLoading: true,
+        requirementPanelError: null,
+        requirementPanelFeature: feature,
+      });
+      try {
+        const [sddConfig, impactRaw, testRaw, gitInfo] = await Promise.all([
+          ds.getSddConfig(feature),
+          ds.getImpactAnalysis(feature),
+          ds.getTestCasesResult(feature),
+          ds.getGitInfo(),
+        ]);
+        set({
+          sddConfig: sddConfig as ObservatorySddConfig,
+          impactAnalysis: impactRaw as ImpactAnalysisResult | null,
+          testCases: testRaw as TestCasesResult | null,
+          gitInfo,
+          requirementPanelLoading: false,
+        });
+      } catch (e) {
+        const msg =
+          e instanceof ObservatoryDataError
+            ? e.message
+            : e instanceof Error
+              ? e.message
+              : String(e);
+        set({
+          requirementPanelError: msg,
+          requirementPanelLoading: false,
+        });
+      }
+    },
+
+    clearRequirementPanel: () =>
+      set({
+        requirementPanelFeature: null,
+        sddConfig: null,
+        impactAnalysis: null,
+        testCases: null,
+        gitInfo: null,
+        requirementPanelError: null,
+      }),
+
+    saveSddConfigPartial: async (feature, partial) => {
+      const ds = getDataSource();
+      const next = await ds.saveSddConfig(feature, partial);
+      if (get().requirementPanelFeature === feature) {
+        set({ sddConfig: next as ObservatorySddConfig });
+      }
     },
   };
 });

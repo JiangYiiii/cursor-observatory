@@ -135,6 +135,41 @@ export type AdvanceKind =
   | "test"
   | "release";
 
+/** 英文/中文逗号分隔的服务名列表 */
+/** 需求链接是否指向 TAPD（用于展示 MCP 拉取提示） */
+export function isTapdRequirementUrl(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  return u.includes("tapd.cn") || u.includes("tapd.com");
+}
+
+export function splitCommaServiceList(s: string | undefined): string[] {
+  if (s == null || !String(s).trim()) return [];
+  return String(s)
+    .split(/[,，]/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 部署卡片展示用：影响分析中的应用名 ∪ 需求级手工列表 ∪ 扩展默认列表。
+ */
+export function mergeDeployServiceDisplayLine(
+  impactAppNames: string[] | undefined,
+  manual: string | undefined,
+  extensionDefault: string | undefined
+): string {
+  const fromImpact = (impactAppNames ?? []).filter(Boolean);
+  const manualParts = splitCommaServiceList(manual);
+  const extParts = splitCommaServiceList(extensionDefault);
+  if (fromImpact.length > 0) {
+    return [...new Set([...fromImpact, ...manualParts, ...extParts])].join(
+      ", "
+    );
+  }
+  const merged = [...new Set([...manualParts, ...extParts])];
+  return merged.length > 0 ? merged.join(", ") : "—";
+}
+
 export function resolveAdvanceKind(cap: Capability): AdvanceKind {
   const sdd = cap.sdd;
   const phase = normalizePhase(cap.phase);
@@ -144,12 +179,13 @@ export function resolveAdvanceKind(cap: Capability): AdvanceKind {
     return "implement";
   }
 
+  // 扫描数据或旧版 capabilities.json 可能仅有 enabled 而无 documents —— 须容错，否则详情页 render 抛错白屏
   const d = sdd.documents;
-  const hasEntry = d.spec || d.sketch;
+  const hasEntry = Boolean(d?.spec || d?.sketch);
   if (!hasEntry) return "specify";
 
-  const hasPlan = d.plan;
-  const hasTasks = d.tasks;
+  const hasPlan = Boolean(d?.plan);
+  const hasTasks = Boolean(d?.tasks);
   if (!hasPlan) return "plan";
   if (!hasTasks) return "tasks";
 

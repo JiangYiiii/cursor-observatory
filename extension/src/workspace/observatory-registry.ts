@@ -93,7 +93,15 @@ export class ObservatoryRegistry implements vscode.Disposable {
       port,
       (r) => this.getStore(r),
       fs.existsSync(webviewDist) ? webviewDist : undefined,
-      () => [...this.folders.keys()]
+      () => [...this.folders.keys()],
+      (workspaceRoot) => {
+        const uri = vscode.Uri.file(workspaceRoot);
+        const cfg = vscode.workspace.getConfiguration("observatory", uri);
+        return {
+          defaultServiceList: cfg.get<string>("deploy.defaultServiceList", "") ?? "",
+          cheetahMcpService: cfg.get<string>("mcp.cheetah", "") ?? "",
+        };
+      }
     );
     await this.server.start();
     this.output.appendLine(

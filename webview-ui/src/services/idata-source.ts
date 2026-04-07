@@ -8,6 +8,7 @@ import type {
   DataModels,
   DocsHealth,
   Manifest,
+  PreflightResult,
   Progress,
   SessionDetail,
   SessionIndex,
@@ -48,6 +49,42 @@ export interface IDataSource {
     id: string,
     updates: Partial<Capability>
   ): Promise<void>;
+
+  /** specs/<feature>/observatory-sdd.json */
+  getSddConfig(feature: string): Promise<Record<string, unknown>>;
+  saveSddConfig(
+    feature: string,
+    partial: Record<string, unknown>
+  ): Promise<Record<string, unknown>>;
+  getImpactAnalysis(feature: string): Promise<unknown | null>;
+  saveImpactAnalysis(
+    feature: string,
+    body: unknown
+  ): Promise<{ warnings?: string[] }>;
+  getTestCasesResult(feature: string): Promise<unknown | null>;
+  saveTestCasesResult(feature: string, body: unknown): Promise<void>;
+  getPromptTemplate(
+    stage: string
+  ): Promise<{ content: string; source: string }>;
+
+  getGitInfo(): Promise<{
+    branch: string;
+    headCommit: string;
+    workingTreeFingerprint: string;
+    lastCommitLine: string | null;
+  }>;
+
+  getImpactAnalysisMd(feature: string): Promise<string | null>;
+  getTestCasesMd(feature: string): Promise<string | null>;
+
+  /** Skill/MCP 预检（与扩展 settings 一致） */
+  getPreflight(stage: string): Promise<PreflightResult>;
+
+  /** 部署卡片：扩展级默认服务列表与 Cheetah MCP 标识（与 settings 一致） */
+  getDeploySettings(): Promise<{
+    defaultServiceList: string;
+    cheetahMcpService: string;
+  }>;
 
   /** 切换工作区前释放 WebSocket / 监听器（HTTP 数据源实现） */
   dispose?(): void;

@@ -17,6 +17,7 @@ import type {
   TestExpectations,
   TestHistoryEntry,
   TestMapping,
+  PreflightResult,
   TestResults,
   Unsubscribe,
   UpdateEvent,
@@ -371,5 +372,254 @@ export class HttpDataSource implements IDataSource {
       }
       throw ObservatoryDataError.fromHttpResponse(res.status, body);
     }
+  }
+
+  private apiUrlWithFeature(
+    path: string,
+    feature: string
+  ): string {
+    const root = encodeURIComponent(this.requireRoot());
+    const feat = encodeURIComponent(feature);
+    const sep = path.includes("?") ? "&" : "?";
+    return `${this.baseUrl}${path}${sep}root=${root}&feature=${feat}`;
+  }
+
+  async getSddConfig(feature: string): Promise<Record<string, unknown>> {
+    const url = this.apiUrlWithFeature("/api/observatory/sdd-config", feature);
+    const res = await fetch(url);
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return (await res.json()) as Record<string, unknown>;
+  }
+
+  async saveSddConfig(
+    feature: string,
+    partial: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    const url = this.apiUrlWithFeature("/api/observatory/sdd-config", feature);
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(partial),
+    });
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    const data = (await res.json()) as { config?: Record<string, unknown> };
+    return data.config ?? {};
+  }
+
+  async getImpactAnalysis(feature: string): Promise<unknown | null> {
+    const url = this.apiUrlWithFeature(
+      "/api/observatory/impact-analysis",
+      feature
+    );
+    const res = await fetch(url);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return await res.json();
+  }
+
+  async saveImpactAnalysis(
+    feature: string,
+    body: unknown
+  ): Promise<{ warnings?: string[] }> {
+    const url = this.apiUrlWithFeature(
+      "/api/observatory/impact-analysis",
+      feature
+    );
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let text = "";
+      try {
+        text = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, text);
+    }
+    try {
+      const data = (await res.json()) as { warnings?: string[] };
+      return { warnings: data.warnings };
+    } catch {
+      return {};
+    }
+  }
+
+  async getTestCasesResult(feature: string): Promise<unknown | null> {
+    const url = this.apiUrlWithFeature("/api/observatory/test-cases", feature);
+    const res = await fetch(url);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return await res.json();
+  }
+
+  async saveTestCasesResult(feature: string, body: unknown): Promise<void> {
+    const url = this.apiUrlWithFeature("/api/observatory/test-cases", feature);
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let text = "";
+      try {
+        text = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, text);
+    }
+  }
+
+  async getPromptTemplate(
+    stage: string
+  ): Promise<{ content: string; source: string }> {
+    const safe = encodeURIComponent(stage);
+    const url = this.apiUrl(`/api/observatory/prompt-template/${safe}`);
+    const res = await fetch(url);
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return (await res.json()) as { content: string; source: string };
+  }
+
+  async getGitInfo(): Promise<{
+    branch: string;
+    headCommit: string;
+    workingTreeFingerprint: string;
+    lastCommitLine: string | null;
+  }> {
+    const url = this.apiUrl("/api/observatory/git-info");
+    const res = await fetch(url);
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return (await res.json()) as {
+      branch: string;
+      headCommit: string;
+      workingTreeFingerprint: string;
+      lastCommitLine: string | null;
+    };
+  }
+
+  async getImpactAnalysisMd(feature: string): Promise<string | null> {
+    const url = this.apiUrlWithFeature(
+      "/api/observatory/impact-analysis-md",
+      feature
+    );
+    const res = await fetch(url);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    const data = (await res.json()) as { markdown?: string };
+    return typeof data.markdown === "string" ? data.markdown : null;
+  }
+
+  async getTestCasesMd(feature: string): Promise<string | null> {
+    const url = this.apiUrlWithFeature("/api/observatory/test-cases-md", feature);
+    const res = await fetch(url);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    const data = (await res.json()) as { markdown?: string };
+    return typeof data.markdown === "string" ? data.markdown : null;
+  }
+
+  async getPreflight(stage: string): Promise<PreflightResult> {
+    const root = encodeURIComponent(this.requireRoot());
+    const st = encodeURIComponent(stage);
+    const url = `${this.baseUrl}/api/observatory/preflight?root=${root}&stage=${st}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return (await res.json()) as PreflightResult;
+  }
+
+  async getDeploySettings(): Promise<{
+    defaultServiceList: string;
+    cheetahMcpService: string;
+  }> {
+    const url = this.apiUrl("/api/observatory/deploy-settings");
+    const res = await fetch(url);
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return (await res.json()) as {
+      defaultServiceList: string;
+      cheetahMcpService: string;
+    };
   }
 }

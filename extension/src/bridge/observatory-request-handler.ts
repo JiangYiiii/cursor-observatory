@@ -4,13 +4,27 @@
  */
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import * as vscode from "vscode";
 import {
   ObservatoryError,
   observatoryErrorFromUnknown,
   type ObservatoryErrorPayload,
 } from "../observatory/errors";
 import { getDataModelAiPromptMarkdown } from "../observatory/project-onboarding";
+import { getGitInfoSummary } from "../observatory/git-info-summary";
+import { loadPromptTemplate } from "../observatory/prompt-template-loader";
+import { runPreflight } from "../observatory/preflight-resolver";
+import {
+  readObservatorySddConfigMerged,
+  writeObservatorySddConfigMerged,
+} from "../observatory/observatory-sdd-config";
+import { sddFeatureObservatoryDirAbs } from "../observatory/sdd-test-paths";
 import type { ObservatoryStore } from "../observatory/store";
+import {
+  processImpactAnalysis,
+  processTestCases,
+  readImpactAnalysisMarkdownForFeature,
+} from "../observatory/validation-pipeline";
 import { runSingleSddFeatureScan } from "../scanners/project-scanner";
 import type { TestExpectations } from "../observatory/types";
 
@@ -42,6 +56,20 @@ function isBridgeRequest(raw: unknown): raw is BridgeRequestMsg {
   if (!raw || typeof raw !== "object") return false;
   const m = raw as Record<string, unknown>;
   return m.type === REQUEST && typeof m.requestId === "string" && typeof m.method === "string";
+}
+
+function requireFeature(params?: Record<string, unknown>): string {
+  const name = params?.feature;
+  if (typeof name !== "string" || name.length === 0 || name.length > 256) {
+    throw new Error("feature required");
+  }
+  if (name.includes("..") || /[/\\]/.test(name)) {
+    throw new Error("invalid feature");
+  }
+  if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
+    throw new Error("invalid feature");
+  }
+  return name;
 }
 
 async function readTestHistoryLines(store: ObservatoryStore): Promise<unknown[]> {
@@ -199,6 +227,122 @@ async function dispatch(
       }
       await runSingleSddFeatureScan(store.workspaceRoot, store, name);
       return { ok: true };
+    }
+    case "getSddConfig": {
+      const feature = requireFeature(params);
+      return readObservatorySddConfigMerged(store.workspaceRoot, feature);
+    }
+    case "saveSddConfig": {
+      const feature = requireFeature(params);
+      const partial = params?.partial;
+      if (!partial || typeof partial !== "object" || Array.isArray(partial)) {
+        throw new Error("saveSddConfig: partial object required");
+      }
+      const prev = await readObservatorySddConfigMerged(
+        store.workspaceRoot,
+        feature
+      );
+      const next = { ...prev, ...(partial as Record<string, unknown>) };
+      await writeObservatorySddConfigMerged(
+        store.workspaceRoot,
+        feature,
+        next
+      );
+      return next;
+    }
+    case "getDeploySettings": {
+      const uri = vscode.Uri.file(store.workspaceRoot);
+      const cfg = vscode.workspace.getConfiguration("observatory", uri);
+      const raw = cfg.get<string>("deploy.defaultServiceList", "") ?? "";
+      const cheetah = cfg.get<string>("mcp.cheetah", "") ?? "";
+      return { defaultServiceList: raw, cheetahMcpService: cheetah };
+    }
+    case "getImpactAnalysis": {
+      const feature = requireFeature(params);
+      const fp = path.join(
+        sddFeatureObservatoryDirAbs(store.workspaceRoot, feature),
+        "impact-analysis.json"
+      );
+      try {
+        const text = await fs.readFile(fp, "utf8");
+        return JSON.parse(text) as unknown;
+      } catch {
+        return null;
+      }
+    }
+    case "saveImpactAnalysis": {
+      const feature = requireFeature(params);
+      const body = params?.body;
+      const result = await processImpactAnalysis(
+        store.workspaceRoot,
+        feature,
+        body
+      );
+      if (!result.ok) {
+        throw new Error(result.errors?.join("; ") ?? "validation failed");
+      }
+      return {
+        ok: true,
+        ...(result.warnings?.length ? { warnings: result.warnings } : {}),
+      };
+    }
+    case "getTestCasesResult": {
+      const feature = requireFeature(params);
+      const fp = path.join(
+        sddFeatureObservatoryDirAbs(store.workspaceRoot, feature),
+        "test-cases.json"
+      );
+      try {
+        const text = await fs.readFile(fp, "utf8");
+        return JSON.parse(text) as unknown;
+      } catch {
+        return null;
+      }
+    }
+    case "saveTestCasesResult": {
+      const feature = requireFeature(params);
+      const body = params?.body;
+      const result = await processTestCases(
+        store.workspaceRoot,
+        feature,
+        body
+      );
+      if (!result.ok) {
+        throw new Error(result.errors?.join("; ") ?? "validation failed");
+      }
+      return { ok: true };
+    }
+    case "getPromptTemplate": {
+      const stage = params?.stage;
+      if (typeof stage !== "string" || !/^[\w-]+$/.test(stage)) {
+        throw new Error("getPromptTemplate: stage required");
+      }
+      return loadPromptTemplate(store.workspaceRoot, stage);
+    }
+    case "getGitInfo":
+      return getGitInfoSummary(store.workspaceRoot);
+    case "getPreflight": {
+      const stage = params?.stage;
+      if (typeof stage !== "string" || !/^[\w-]+$/.test(stage) || stage.length > 64) {
+        throw new Error("getPreflight: stage required");
+      }
+      return runPreflight(store.workspaceRoot, stage, { id: "", sdd: {} });
+    }
+    case "getImpactAnalysisMd": {
+      const feature = requireFeature(params);
+      return readImpactAnalysisMarkdownForFeature(store.workspaceRoot, feature);
+    }
+    case "getTestCasesMd": {
+      const feature = requireFeature(params);
+      const fp = path.join(
+        sddFeatureObservatoryDirAbs(store.workspaceRoot, feature),
+        "test-cases.md"
+      );
+      try {
+        return await fs.readFile(fp, "utf8");
+      } catch {
+        return null;
+      }
     }
     case "triggerScan":
     case "triggerTests":

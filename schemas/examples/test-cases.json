@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "executed_at": "2026-04-07T12:00:00.000Z",
+  "source_impact_analysis_head_commit": "deadbeef",
+  "source_impact_analysis_fingerprint": "sha256:example",
+  "workspace_branch": "feature/example",
+  "head_commit": "deadbeef",
+  "working_tree_fingerprint": "sha256:example",
+  "summary": {
+    "total_scenarios": 1,
+    "generated_cases": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0
+  },
+  "cases": [
+    {
+      "id": "TC_001",
+      "scenario_id": "SCENARIO_001",
+      "scenario_name": "示例场景",
+      "description": "示例用例",
+      "request": {},
+      "expected": {},
+      "status": "passed"
+    }
+  ]
+}

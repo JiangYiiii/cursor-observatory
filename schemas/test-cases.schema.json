@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cursor-observatory.local/schemas/test-cases.schema.json",
+  "title": "SDD observatory test-cases.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "executed_at",
+    "source_impact_analysis_head_commit",
+    "source_impact_analysis_fingerprint",
+    "workspace_branch",
+    "head_commit",
+    "working_tree_fingerprint",
+    "summary",
+    "cases"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "executed_at": { "type": "string", "format": "date-time" },
+    "source_impact_analysis_head_commit": {
+      "type": "string",
+      "description": "生成测试用例时所使用的 impact-analysis.json 对应 head_commit。由扩展注入。"
+    },
+    "source_impact_analysis_fingerprint": {
+      "type": "string",
+      "description": "生成测试用例时所使用的 impact-analysis.json 对应 working_tree_fingerprint。由扩展注入。"
+    },
+    "workspace_branch": {
+      "type": "string",
+      "description": "执行测试时所在分支。由扩展注入。"
+    },
+    "head_commit": {
+      "type": "string",
+      "description": "执行测试时 HEAD commit。由扩展注入。"
+    },
+    "working_tree_fingerprint": {
+      "type": "string",
+      "description": "执行测试时工作区指纹。由扩展注入。"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_scenarios",
+        "generated_cases",
+        "passed",
+        "failed",
+        "skipped"
+      ],
+      "properties": {
+        "total_scenarios": { "type": "integer", "minimum": 0 },
+        "generated_cases": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "scenario_id",
+          "scenario_name",
+          "description",
+          "request",
+          "expected",
+          "status"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "scenario_id": {
+            "type": "string",
+            "pattern": "^SCENARIO_\\d{3,}$",
+            "description": "关联 impact-analysis.json 的 scenario ID"
+          },
+          "scenario_name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "request": { "type": "object" },
+          "expected": { "type": "object" },
+          "actual": { "type": "object" },
+          "redacted_fields": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "已脱敏的字段路径列表"
+          },
+          "status": {
+            "enum": ["passed", "failed", "skipped", "pending"]
+          },
+          "error_message": { "type": "string" }
+        }
+      }
+    }
+  }
+}

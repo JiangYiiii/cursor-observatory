@@ -22,6 +22,8 @@ const FILENAME_TO_SCHEMA: Record<string, string> = {
   "test-expectations.json": "test-expectations.schema.json",
   "docs-health.json": "docs-health.schema.json",
   "sessions/index.json": "sessions-index.schema.json",
+  "impact-analysis.json": "impact-analysis.schema.json",
+  "test-cases.json": "test-cases.schema.json",
 };
 
 function normalizeRelativePath(p: string): string {

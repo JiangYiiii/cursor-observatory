@@ -18,6 +18,8 @@ const pairs = [
   ["examples/data-models.json", "data-models.schema.json"],
   ["examples/docs-health.json", "docs-health.schema.json"],
   ["examples/sessions-index.json", "sessions-index.schema.json"],
+  ["examples/impact-analysis.json", "impact-analysis.schema.json"],
+  ["examples/test-cases.json", "test-cases.schema.json"],
 ];
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
