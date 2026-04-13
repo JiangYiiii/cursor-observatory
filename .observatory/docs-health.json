@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "generated_at": "2026-04-13T03:50:50.182Z",
+  "generated_at": "2026-04-13T06:47:18.441Z",
   "overall_score": 50,
   "checks": [
     {
@@ -11,16 +11,16 @@
         "total_modules": 223,
         "annotated_modules": 1,
         "missing": [
+          "extension/vitest.config.ts",
+          "extension/webpack.config.js",
+          "schemas/validate.mjs",
           "scripts/probe-cicd-image-tags.mjs",
           "scripts/probe-pipeline-type-annotations.mjs",
           "scripts/probe-pipelines-image-tags.mjs",
-          "schemas/validate.mjs",
           "webview-ui/vite.config.ts",
-          "extension/vitest.config.ts",
-          "extension/webpack.config.js",
-          "webview-ui/src/App.tsx",
-          "webview-ui/src/main.tsx",
-          "webview-ui/src/router.tsx"
+          "extension/src/extension.ts",
+          "extension/src/sdd-scan-messages.ts",
+          "webview-ui/src/App.tsx"
         ]
       }
     },
