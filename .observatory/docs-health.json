@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-13T03:50:50.182Z",
+  "overall_score": 50,
+  "checks": [
+    {
+      "check": "business_doc_id_coverage",
+      "description": "代码源文件中的 business_doc_id 标注覆盖率（多语言启发式）",
+      "score": 0,
+      "details": {
+        "total_modules": 223,
+        "annotated_modules": 1,
+        "missing": [
+          "scripts/probe-cicd-image-tags.mjs",
+          "scripts/probe-pipeline-type-annotations.mjs",
+          "scripts/probe-pipelines-image-tags.mjs",
+          "schemas/validate.mjs",
+          "webview-ui/vite.config.ts",
+          "extension/vitest.config.ts",
+          "extension/webpack.config.js",
+          "webview-ui/src/App.tsx",
+          "webview-ui/src/main.tsx",
+          "webview-ui/src/router.tsx"
+        ]
+      }
+    },
+    {
+      "check": "doc_index_consistency",
+      "description": "ai-doc-index.json presence",
+      "score": 100,
+      "details": {
+        "total_entries": 0,
+        "consistent": 0,
+        "orphan_entries": [],
+        "missing_entries": []
+      }
+    }
+  ]
+}
