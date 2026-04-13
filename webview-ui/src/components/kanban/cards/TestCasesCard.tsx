@@ -86,7 +86,10 @@ export function TestCasesCard({
         </div>
       </div>
       <p className="text-[10px] text-zinc-500">
-        新鲜度：<span className="font-medium">{freshness}</span>
+        状态：
+        <span className="font-medium">
+          {freshness === "missing" ? "未生成" : "已加载"}
+        </span>
       </p>
       <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4">
         <div className="rounded bg-zinc-50 px-2 py-1 dark:bg-zinc-800/80">

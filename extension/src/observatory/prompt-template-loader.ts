@@ -20,6 +20,8 @@ const STAGE_TO_FILENAME: Record<string, string> = {
   "code-submit": "code-submit.md",
   deploy: "deploy.md",
   "test-case": "test-case.md",
+  "docs-catalog": "docs-catalog.md",
+  "docs-semantic-index": "docs-semantic-index.md",
 };
 
 /**

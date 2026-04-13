@@ -6,7 +6,65 @@
 import { normalizePhase, PHASE_TITLE } from "@/lib/kanban-utils";
 import { resolveAdvanceKind } from "@/lib/requirement-utils";
 import { getDataSource } from "@/services/data-source-instance";
-import type { Capability } from "@/types/observatory";
+import type { Capability, ReleaseDiffPayload } from "@/types/observatory";
+
+function releaseDiffMarkdownBlock(diff: ReleaseDiffPayload | null): string {
+  if (!diff) {
+    return `## 已采集的 Git 对比（扩展不可用或未返回）
+
+请在仓库根执行 \`git fetch\`，自行解析上游 ref（优先 \`git rev-parse --abbrev-ref @{u}\`，否则 \`origin/main\` / \`origin/master\`），计算 merge-base 后执行：
+
+\`\`\`bash
+git merge-base <upstream> HEAD
+git diff <merge-base>..HEAD --stat
+git diff <merge-base>..HEAD
+git log <merge-base>..HEAD --format=fuller
+\`\`\`
+
+将输出粘贴到对话中供分析。`;
+  }
+  if (!diff.ok) {
+    const branch = diff.currentBranch
+      ? `\n- **当前分支**: \`${diff.currentBranch}\``
+      : "";
+    const hint = diff.hint ? `\n- **建议**: ${diff.hint}` : "";
+    return `## 已采集的 Git 对比（失败）
+
+- **原因**: ${diff.reason}${branch}${hint}
+
+请按上一节命令在本地补齐 diff / log 后再生成准入准出。`;
+  }
+
+  const wt = diff.workingTreeNote.trim()
+    ? `\n### 工作区未提交变更\n\n${diff.workingTreeNote}\n`
+    : "";
+
+  return `## 已采集的 Git 对比（当前分支 vs 上游：\`${diff.upstreamRef}\`）
+
+- **当前分支**: \`${diff.currentBranch}\`
+- **HEAD**: \`${diff.headCommit.slice(0, 7)}\`
+- **merge-base**: \`${diff.mergeBase.slice(0, 7)}\`
+- **相对上游提交数**: ${diff.commitsAhead}
+- **变更文件数**: ${diff.filesChanged}
+- **diff --stat**（含合并范围内已提交变更）:
+
+\`\`\`
+${diff.statBlock}
+\`\`\`
+
+### 提交说明（用于提取 Differential Revision 等元数据；最多展示部分提交）
+
+\`\`\`
+${diff.commitMessagesBlock}
+\`\`\`
+
+### 统一 diff（${diff.diffTruncated ? "已截断，完整补丁请在本地查看" : "与上述范围一致"}）
+
+\`\`\`diff
+${diff.diffPatch}
+\`\`\`
+${wt}`;
+}
 
 export function trackingFooter(capabilityId: string | undefined): string {
   if (!capabilityId) {
@@ -289,13 +347,63 @@ ${bugSection}
 ${trackingFooter(cap.id)}`;
 }
 
-/** 发布 */
-export function generateReleasePrompt(cap: Capability): string {
-  return `# Observatory — 标记已发布
+/** 发布：含相对上游 diff 的准入准出生成指引（不落盘除非用户确认） */
+export function generateReleasePrompt(
+  cap: Capability,
+  diff: ReleaseDiffPayload | null
+): string {
+  const specDir = sddPath(cap);
+  return `# Observatory — 发布说明 / 上线准入准出
 
 ${contextSection(cap)}
 
-## 操作
+## 角色与目标
+你是一位资深的互联网金融系统架构师兼代码审查专家，擅长 Git diff 评审、Spring Boot 配置与资源/风险量化评估。请**严格基于下方「已采集的 Git 对比」**（必要时结合工作区未提交变更提示）输出**一份完整的上线准入准出 Markdown 报告**，面向后端、运维与技术 Leader。
+
+## 分析要求（Java / Spring Boot 为主）
+1. **代码变更统计**：提交数、文件数、主要模块/包；从每条 commit message 中提取 **Differential Revision** 行（如 \`Differential Revision: https://code.yangqianguan.com/D553174\`），逐条列出；无则注明「无关联 Diff」。
+2. **配置变更**：从 diff 中识别
+   - \`@Value("...\` 中的配置键（如 \`cash_loan.admin_contract_upload_check\`）
+   - 类上 \`@ConfigurationProperties("prefix")\` → 以 \`prefix.字段名\` 列出
+   - 实验：涉及 \`com.yqg.experiment.client.service.IExperimentRpcService\` / 实验枚举处
+   - 定时任务：继承 \`com.yqg.scheduler.executor.job.BaseJob\`、类名常以 \`Job\` 结尾
+   - 数据源 / Redis：连接池、超时、慢查询阈值等（**连接数、隔离级别、超时等须标注需人工二次确认**）
+3. **资源消耗**：按变更内容给出 CPU / 内存 / QPS / 带宽 / DB / 缓存 的影响程度（高 / 中 / 低 / 优化）及**需关注指标**（与业务经验一致即可）。
+4. **合规**：配置与 diff 中出现的密码、Token、密钥等**脱敏**为 \`***\`；勿粘贴明文凭据。
+
+${releaseDiffMarkdownBlock(diff)}
+
+## 输出结构（必须使用 Markdown，层级与下列一致）
+### 一、变更概述
+（Commit 数、文件数、主要模块、变更类型）
+
+### 二、变更详情
+#### 关联的 Differential Revision
+（编号列表 + 链接；无则写 Commit 摘要）
+
+### 三、配置变更汇总
+#### 3.1 属性注入与配置类
+（表格：配置项 | 配置类型 tech/job/实验 | 新增/更新 | 用途说明）
+
+### 四、资源消耗评估
+#### 4.1 容器资源（表：资源类型 | 影响程度 | 原因 | 指标）
+#### 4.2 QPS 与接口性能
+#### 4.3 网络带宽
+#### 4.4 数据库影响
+#### 4.5 缓存影响
+
+### 五、风险评估与上线建议
+#### 5.1 风险点（高/中/低）
+#### 5.2 上线方案建议（窗口、灰度、回滚）
+#### 5.3 监控指标清单
+
+## 文档落盘策略（重要）
+- **默认**：仅在对话中输出上述报告全文，**不要**自动创建或写入仓库中的任何文件。
+- **若用户明确同意保存**（例如用户回复确认「保存准入准出文档」）：将报告写入与本需求 SDD 产物同目录的 Observatory 子目录，建议文件名 \`release-admission.md\`，即：
+  - \`${specDir}/Observatory/release-admission.md\`
+  - 若项目中已存在小写 \`observatory/\` 目录（与 impact-analysis 等文件同级），**使用已有目录名**，不要重复建新目录。
+
+## 合并进发布流水（可选）
 在提交说明中 **单独一行** 写入（扩展会解析并标 released）：
 \`\`\`
 Observatory: ${cap.id}
@@ -305,6 +413,19 @@ Observatory: ${cap.id}
 推送后 **Run Full Scan** 刷新看板。
 
 ${trackingFooter(cap.id)}`;
+}
+
+/** 拉取扩展采集的「当前分支 vs 上游」diff 后生成发布 Prompt */
+export async function generateReleasePromptAsync(
+  cap: Capability
+): Promise<string> {
+  let diff: ReleaseDiffPayload | null = null;
+  try {
+    diff = await getDataSource().getReleaseDiff();
+  } catch {
+    diff = null;
+  }
+  return generateReleasePrompt(cap, diff);
 }
 
 /** 推进需求 */
@@ -328,7 +449,7 @@ export async function generateAdvancePrompt(
     case "test":
       return generateTestPrompt(cap, testSummary, testOptions);
     case "release":
-      return generateReleasePrompt(cap);
+      return generateReleasePromptAsync(cap);
     default:
       return generateTestPrompt(cap, testSummary, testOptions);
   }
@@ -365,9 +486,9 @@ ${changedFilesHint}
 1. **优先** 阅读变更文件中的 \`@ai.doc\` 等注解，提取锚点；在 \`docs/domain/**/meta/ai-index-*.json\` 中反查业务流程。
 2. 无注解时，再通过类名、方法、调用关系推断受影响场景。
 3. 识别受影响模块；若存在 Spring Boot 启动类，将对应模块标为可部署应用。
-4. **必须** 将结果保存为 JSON 文件：\`${vars.sddPath}/observatory/impact-analysis.json\`（业务场景与结构须符合 Schema；\`summary\` 与 Git 相关字段由扩展在「保存/校验」时注入或覆盖）。
+4. **必须** 将结果保存为 JSON 文件：\`${vars.sddPath}/observatory/impact-analysis.json\`（业务场景与结构须符合 Schema；\`summary\` 与 Git 相关字段可由扩展在「保存/校验」时注入或覆盖）。
 5. 不要直接编辑 \`impact-analysis.md\`（由扩展从 JSON 派生）。
-6. **不要自行计算或编造** \`working_tree_fingerprint\`（64 位十六进制等）；指纹算法仅在扩展 \`git-utils\` 中实现。若无法通过面板保存，可暂用占位符 \`AI_PENDING_EXTENSION_INJECT\` 或留空由扩展补全，**切勿**用自创哈希公式。落盘后务必在 Observatory 完成扩展侧「保存/校验」，否则看板可能长期提示过期。若业务仓库将 \`impact-analysis.json\` 加入 \`.gitignore\`，可避免未跟踪 JSON 参与工作区指纹自指，可与团队约定选用。
+6. Git 元数据（如 \`working_tree_fingerprint\`）可由扩展注入或暂用占位符 \`AI_PENDING_EXTENSION_INJECT\`；看板不再据此自动判定「过期」，需要重跑时请使用「重新分析」。
 
 ## 结果文件格式要求
 保存路径：\`${vars.sddPath}/observatory/impact-analysis.json\`  
@@ -425,15 +546,13 @@ ${contextSection(c)}
 - 当前分支: ${params.currentBranch}
 - 泳道: ${params.swimlane || "（未填写）"}
 - 影响的应用服务: ${params.affectedServices}
-- 影响分析新鲜度: ${params.impactFreshness}
+- 影响分析状态: ${params.impactFreshness}（看板不自动判过期；请自行确认是否需重新分析）
 
 ## MCP 探测
 - 状态: ${params.cicdMcpStatus}
 - 服务/工具: ${params.cicdMcpInfo}
 
 若状态不是已配置，请在 Cursor MCP 设置中添加 CICD 服务（仅保存服务名/工具名到 Observatory 设置，不含 token）。
-
-若影响分析非 fresh：优先重新执行「影响场景分析」；若必须继续，请在 UI 中手动确认部署服务列表后再执行。
 
 ## 步骤
 1. 确认参数（服务列表、分支、泳道）
@@ -465,7 +584,7 @@ export function generateCheetahBranchWorkflowPrompt(params: {
 }): string {
   const svc =
     params.cheetahMcpService?.trim() ||
-    "（请在 Cursor MCP 中配置 Cheetah / 泳道 OpenAPI 服务名，并填入 Observatory 设置 observatory.mcp.cheetah）";
+    "（请在 Cursor MCP 中配置 Cheetah / 泳道 OpenAPI 服务名，并填入 Observatory 设置 observatory.deploy.cheetahMcp）";
   return `# 开发分支工作流（Cheetah MCP + Git）
 
 ## 上下文

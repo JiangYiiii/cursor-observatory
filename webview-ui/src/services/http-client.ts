@@ -6,19 +6,37 @@ import type {
   AiSession,
   AiSessionsDocument,
   Architecture,
+  BatchDeployRequest,
+  BatchOperationItemResult,
+  BatchTrafficShiftRequest,
+  CanaryDeployment,
   Capability,
   CapabilitiesDocument,
   DataModels,
+  DocsAiIndicesPayload,
+  DocsCatalogDocument,
+  DocsConfigPayload,
+  DocsFilePayload,
   DocsHealth,
+  DocsTreePayload,
+  ImageTag,
   Manifest,
+  PipelineInfo,
+  PipelineNode,
+  PipelineRunSummary,
+  PipelineStageSummary,
+  PreflightResult,
   Progress,
+  ReleaseDiffPayload,
+  ReleaseEnvStatus,
   SessionDetail,
   SessionIndex,
   TestExpectations,
   TestHistoryEntry,
   TestMapping,
-  PreflightResult,
   TestResults,
+  TrafficChangeLog,
+  CanarySwitchPreCheck,
   Unsubscribe,
   UpdateEvent,
 } from "../types/observatory";
@@ -91,6 +109,38 @@ export class HttpDataSource implements IDataSource {
     const url = this.apiUrl(path);
     const res = await fetch(url);
     if (res.status === 404) return null;
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return (await res.json()) as T;
+  }
+
+  /** /api/workspace/*：404 时解析服务端 JSON，避免误报「无法读取」类笼统错误 */
+  private async fetchWorkspaceJson<T>(path: string): Promise<T> {
+    const url = this.apiUrl(path);
+    const res = await fetch(url);
+    if (res.status === 404) {
+      let msg =
+        "工作区未在 Observatory 中注册，或浏览器地址 ?root= 与已打开文件夹不一致（含符号链接路径差异）。请用扩展打开 Dashboard，或核对 URL 中的工作区绝对路径。";
+      try {
+        const j = (await res.json()) as { message?: string; code?: string };
+        if (typeof j.message === "string" && j.message.length > 0) {
+          msg =
+            j.message === "workspace not registered"
+              ? msg
+              : j.message;
+        }
+      } catch {
+        /* 保持默认说明 */
+      }
+      throw new ObservatoryDataError(msg, "NOT_FOUND", { status: 404 });
+    }
     if (!res.ok) {
       let body = "";
       try {
@@ -193,6 +243,83 @@ export class HttpDataSource implements IDataSource {
 
   async getDocsHealth(): Promise<DocsHealth | null> {
     return this.fetchJson<DocsHealth>("/api/observatory/docs-health");
+  }
+
+  async getDocsConfig(): Promise<DocsConfigPayload> {
+    return this.fetchWorkspaceJson<DocsConfigPayload>(
+      "/api/workspace/docs-config"
+    );
+  }
+
+  async getDocsTree(): Promise<DocsTreePayload> {
+    return this.fetchWorkspaceJson<DocsTreePayload>("/api/workspace/docs-tree");
+  }
+
+  async getDocsFile(relativePath: string): Promise<DocsFilePayload> {
+    const base = this.apiUrl("/api/workspace/docs-file");
+    const url = `${base}&relativePath=${encodeURIComponent(relativePath)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return (await res.json()) as DocsFilePayload;
+  }
+
+  async getDocsCatalog(): Promise<DocsCatalogDocument | null> {
+    const url = this.apiUrl("/api/workspace/docs-catalog");
+    const res = await fetch(url);
+    if (res.status === 404) {
+      try {
+        const j = (await res.json()) as { message?: string };
+        if (j.message === "docs-catalog.json") return null;
+        let msg =
+          "工作区未在 Observatory 中注册，或浏览器地址 ?root= 与已打开文件夹不一致（含符号链接路径差异）。请用扩展打开 Dashboard，或核对 URL 中的工作区绝对路径。";
+        if (
+          typeof j.message === "string" &&
+          j.message.length > 0 &&
+          j.message !== "workspace not registered"
+        ) {
+          msg = j.message;
+        }
+        throw new ObservatoryDataError(msg, "NOT_FOUND", { status: 404 });
+      } catch (e) {
+        if (e instanceof ObservatoryDataError) throw e;
+        throw new ObservatoryDataError(
+          "无法读取 docs-catalog",
+          "NOT_FOUND",
+          { status: 404 }
+        );
+      }
+    }
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return (await res.json()) as DocsCatalogDocument;
+  }
+
+  async getDocsAiIndices(): Promise<DocsAiIndicesPayload> {
+    return this.fetchWorkspaceJson<DocsAiIndicesPayload>(
+      "/api/workspace/docs-ai-indices"
+    );
+  }
+
+  async openWorkspaceFile(_relativePath: string): Promise<{ ok: boolean }> {
+    console.warn(
+      "[Observatory] openWorkspaceFile 仅在 VS Code Webview（Bridge）中可用。"
+    );
+    return { ok: false };
   }
 
   async getSessionList(): Promise<SessionIndex | null> {
@@ -548,6 +675,21 @@ export class HttpDataSource implements IDataSource {
     };
   }
 
+  async getReleaseDiff(): Promise<ReleaseDiffPayload> {
+    const url = this.apiUrl("/api/observatory/release-diff");
+    const res = await fetch(url);
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch {
+        /* ignore */
+      }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return (await res.json()) as ReleaseDiffPayload;
+  }
+
   async getImpactAnalysisMd(feature: string): Promise<string | null> {
     const url = this.apiUrlWithFeature(
       "/api/observatory/impact-analysis-md",
@@ -621,5 +763,251 @@ export class HttpDataSource implements IDataSource {
       defaultServiceList: string;
       cheetahMcpService: string;
     };
+  }
+
+  // --- Release Workflow ---
+
+  private _releaseTokenPromise: Promise<string | null> | null = null;
+
+  /** 浏览器 fetch 无默认超时，挂起时发布页会一直停在「正在检查环境配置」 */
+  private async fetchWithDeadline(
+    url: string,
+    init: RequestInit,
+    deadlineMs: number
+  ): Promise<Response> {
+    if (init.signal) {
+      return fetch(url, init);
+    }
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), deadlineMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(tid);
+    }
+  }
+
+  private invalidateReleaseToken(): void {
+    const g = globalThis as unknown as { __OBSERVATORY_SESSION_TOKEN__?: string };
+    delete g.__OBSERVATORY_SESSION_TOKEN__;
+    this._releaseTokenPromise = null;
+  }
+
+  private async fetchReleaseSessionToken(): Promise<string | null> {
+    try {
+      const url = this.publicApiUrl("/api/release/session-token");
+      const res = await this.fetchWithDeadline(url, {}, 15_000);
+      if (!res.ok) return null;
+      const data = (await res.json()) as { token?: string };
+      if (data.token) {
+        const g = globalThis as unknown as { __OBSERVATORY_SESSION_TOKEN__?: string };
+        g.__OBSERVATORY_SESSION_TOKEN__ = data.token;
+      }
+      return data.token ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async ensureReleaseSessionToken(): Promise<string | null> {
+    const g = globalThis as unknown as { __OBSERVATORY_SESSION_TOKEN__?: string };
+    if (g.__OBSERVATORY_SESSION_TOKEN__) return g.__OBSERVATORY_SESSION_TOKEN__;
+
+    if (!this._releaseTokenPromise) {
+      this._releaseTokenPromise = this.fetchReleaseSessionToken().then((token) => {
+        if (!token) this._releaseTokenPromise = null;
+        return token;
+      });
+    }
+    return this._releaseTokenPromise;
+  }
+
+  private async releaseHeaders(extra?: Record<string, string>): Promise<Record<string, string>> {
+    const headers: Record<string, string> = { ...extra };
+    const token = await this.ensureReleaseSessionToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    return headers;
+  }
+
+  private async releaseFetchJson<T>(path: string, _retried = false): Promise<T | null> {
+    const url = this.publicApiUrl(path);
+    const res = await this.fetchWithDeadline(url, { headers: await this.releaseHeaders() }, 90_000);
+    if (res.status === 403 && !_retried) {
+      this.invalidateReleaseToken();
+      return this.releaseFetchJson<T>(path, true);
+    }
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      let body = "";
+      try {
+        body = await res.text();
+      } catch { /* ignore */ }
+      throw ObservatoryDataError.fromHttpResponse(res.status, body);
+    }
+    return (await res.json()) as T;
+  }
+
+  private async releasePostJson<T>(path: string, body: unknown, _retried = false): Promise<T> {
+    const url = this.publicApiUrl(path);
+    const res = await this.fetchWithDeadline(url, {
+      method: "POST",
+      headers: await this.releaseHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    }, 120_000);
+    if (res.status === 403 && !_retried) {
+      this.invalidateReleaseToken();
+      return this.releasePostJson<T>(path, body, true);
+    }
+    if (!res.ok) {
+      let text = "";
+      try {
+        text = await res.text();
+      } catch { /* ignore */ }
+      throw ObservatoryDataError.fromHttpResponse(res.status, text);
+    }
+    return (await res.json()) as T;
+  }
+
+  async getReleaseEnvStatus(): Promise<ReleaseEnvStatus> {
+    const data = await this.releaseFetchJson<ReleaseEnvStatus>("/api/release/env-status");
+    if (!data) throw new ObservatoryDataError("环境状态不可用", "RELEASE_ENV_ERROR");
+    return data;
+  }
+
+  async listReleasePipelines(): Promise<PipelineInfo[]> {
+    return (await this.releaseFetchJson<PipelineInfo[]>("/api/release/pipelines")) ?? [];
+  }
+
+  async listReleaseStageSummaries(): Promise<PipelineStageSummary[]> {
+    return (await this.releaseFetchJson<PipelineStageSummary[]>("/api/release/pipeline-stage-summaries")) ?? [];
+  }
+
+  async getLatestPipelineRun(pipelineName: string): Promise<PipelineRunSummary | null> {
+    const safe = encodeURIComponent(pipelineName);
+    return this.releaseFetchJson<PipelineRunSummary>(`/api/release/pipelines/${safe}/latest-run`);
+  }
+
+  async getPipelineRunNodes(runId: string): Promise<PipelineNode[]> {
+    const safe = encodeURIComponent(runId);
+    return (await this.releaseFetchJson<PipelineNode[]>(`/api/release/pipeline-runs/${safe}/nodes`)) ?? [];
+  }
+
+  async listReleaseImages(repoName: string): Promise<ImageTag[]> {
+    const safe = encodeURIComponent(repoName);
+    return (await this.releaseFetchJson<ImageTag[]>(`/api/release/images/${safe}`)) ?? [];
+  }
+
+  async triggerReleaseDeploy(
+    pipelineName: string,
+    fullModuleName: string,
+    imageTag: string,
+    options?: { ksPipelineType?: string; includeCanaryDeployHeader?: boolean },
+  ): Promise<{ runId: string }> {
+    return this.releasePostJson<{ runId: string }>("/api/release/deploy", {
+      pipelineName,
+      fullModuleName,
+      imageTag,
+      ...options,
+    });
+  }
+
+  async batchReleaseDeploy(
+    request: BatchDeployRequest
+  ): Promise<{ operationId: string; results: BatchOperationItemResult[] }> {
+    return this.releasePostJson<{ operationId: string; results: BatchOperationItemResult[] }>(
+      "/api/release/batch-deploy",
+      request
+    );
+  }
+
+  async getReleaseCanary(pipeline: string): Promise<CanaryDeployment | null> {
+    const safe = encodeURIComponent(pipeline);
+    return this.releaseFetchJson<CanaryDeployment>(`/api/release/canary/${safe}`);
+  }
+
+  async preCheckReleaseCanarySwitch(pipeline: string): Promise<CanarySwitchPreCheck> {
+    const safe = encodeURIComponent(pipeline);
+    const data = await this.releaseFetchJson<CanarySwitchPreCheck>(
+      `/api/release/canary-switch-precheck/${safe}`
+    );
+    return data ?? { canSwitch: false, reason: "预检无返回" };
+  }
+
+  async shiftReleaseTraffic(
+    pipeline: string,
+    weights: Record<string, number>,
+    meta?: unknown
+  ): Promise<BatchOperationItemResult> {
+    const safe = encodeURIComponent(pipeline);
+    const url = this.publicApiUrl(`/api/release/canary/${safe}/shift`);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: await this.releaseHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ weights, meta }),
+    });
+    const text = await res.text();
+    let parsed: BatchOperationItemResult | { code?: string; message?: string; detail?: BatchOperationItemResult } =
+      { pipeline, status: "failed", message: text };
+    try {
+      if (text) parsed = JSON.parse(text) as typeof parsed;
+    } catch {
+      /* use default */
+    }
+    if (!res.ok) {
+      const msg =
+        typeof parsed === "object" && parsed && "message" in parsed && typeof parsed.message === "string"
+          ? parsed.message
+          : text;
+      throw ObservatoryDataError.fromHttpResponse(res.status, msg);
+    }
+    return parsed as BatchOperationItemResult;
+  }
+
+  async submitReleasePipelineRunInput(
+    pipelineName: string,
+    runId: string,
+    nodeId: string,
+    stepId: string,
+    inputId: string,
+    abort: boolean,
+    jenkinsBuildId?: string
+  ): Promise<void> {
+    await this.releasePostJson<{ ok: boolean }>("/api/release/pipeline-input", {
+      pipelineName,
+      runId,
+      nodeId,
+      stepId,
+      inputId,
+      abort,
+      ...(jenkinsBuildId ? { jenkinsBuildId } : {}),
+    });
+  }
+
+  async batchShiftReleaseTraffic(
+    request: BatchTrafficShiftRequest
+  ): Promise<{ operationId: string; results: BatchOperationItemResult[] }> {
+    return this.releasePostJson<{ operationId: string; results: BatchOperationItemResult[] }>(
+      "/api/release/batch-traffic-shift",
+      request
+    );
+  }
+
+  async getReleaseTrafficLogs(pipeline: string): Promise<TrafficChangeLog[]> {
+    const safe = encodeURIComponent(pipeline);
+    return (await this.releaseFetchJson<TrafficChangeLog[]>(`/api/release/traffic-logs/${safe}`)) ?? [];
+  }
+
+  async checkReleaseRollback(
+    module: string,
+    image: string
+  ): Promise<{ canRollback: boolean; reason?: string }> {
+    const m = encodeURIComponent(module);
+    const img = encodeURIComponent(image);
+    const data = await this.releaseFetchJson<{ canRollback: boolean; reason?: string }>(
+      `/api/release/rollback-check?module=${m}&image=${img}`
+    );
+    return data ?? { canRollback: false, reason: "接口不可用" };
   }
 }

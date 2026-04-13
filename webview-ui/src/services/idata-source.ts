@@ -4,18 +4,36 @@
 import type {
   AiSession,
   Architecture,
+  BatchDeployRequest,
+  BatchOperationItemResult,
+  BatchTrafficShiftRequest,
+  CanaryDeployment,
   Capability,
   DataModels,
+  DocsAiIndicesPayload,
+  DocsCatalogDocument,
+  DocsConfigPayload,
+  DocsFilePayload,
   DocsHealth,
+  DocsTreePayload,
+  ImageTag,
   Manifest,
+  PipelineInfo,
+  PipelineNode,
+  PipelineRunSummary,
+  PipelineStageSummary,
   PreflightResult,
   Progress,
+  ReleaseDiffPayload,
+  ReleaseEnvStatus,
   SessionDetail,
   SessionIndex,
   TestExpectations,
   TestHistoryEntry,
   TestMapping,
   TestResults,
+  TrafficChangeLog,
+  CanarySwitchPreCheck,
   Unsubscribe,
   UpdateEvent,
 } from "../types/observatory";
@@ -36,6 +54,19 @@ export interface IDataSource {
   /** 与扩展「Open Data Model AI Prompt」一致的 Markdown，用于初始化 data-models.json */
   getDataModelAiPromptMarkdown(): Promise<string>;
   getDocsHealth(): Promise<DocsHealth | null>;
+
+  /** 文档根与索引配置（与扩展 observatory.docs.* 一致） */
+  getDocsConfig(): Promise<DocsConfigPayload>;
+  /** 文档根下 Markdown 树（安全只读） */
+  getDocsTree(): Promise<DocsTreePayload>;
+  /** 读取文档根下单个 UTF-8 文本文件（主要为 .md） */
+  getDocsFile(relativePath: string): Promise<DocsFilePayload>;
+  /** 00-meta/docs-catalog.json；不存在时返回 null */
+  getDocsCatalog(): Promise<DocsCatalogDocument | null>;
+  /** 语义锚点索引摘要列表 */
+  getDocsAiIndices(): Promise<DocsAiIndicesPayload>;
+  /** 在 VS Code 中打开文档根下文件（浏览器模式无操作） */
+  openWorkspaceFile(relativePath: string): Promise<{ ok: boolean }>;
   getSessionList(): Promise<SessionIndex | null>;
   getSession(id: string): Promise<SessionDetail | null>;
 
@@ -74,6 +105,9 @@ export interface IDataSource {
     lastCommitLine: string | null;
   }>;
 
+  /** 当前分支相对上游的 diff 与提交摘要（发布说明 / 准入准出） */
+  getReleaseDiff(): Promise<ReleaseDiffPayload>;
+
   getImpactAnalysisMd(feature: string): Promise<string | null>;
   getTestCasesMd(feature: string): Promise<string | null>;
 
@@ -85,6 +119,40 @@ export interface IDataSource {
     defaultServiceList: string;
     cheetahMcpService: string;
   }>;
+
+  // --- Release Workflow ---
+  getReleaseEnvStatus(): Promise<ReleaseEnvStatus>;
+  listReleasePipelines(): Promise<PipelineInfo[]>;
+  listReleaseStageSummaries(): Promise<PipelineStageSummary[]>;
+  getLatestPipelineRun(pipelineName: string): Promise<PipelineRunSummary | null>;
+  getPipelineRunNodes(runId: string): Promise<PipelineNode[]>;
+  listReleaseImages(repoName: string): Promise<ImageTag[]>;
+  triggerReleaseDeploy(
+    pipelineName: string,
+    fullModuleName: string,
+    imageTag: string,
+    options?: { ksPipelineType?: string; includeCanaryDeployHeader?: boolean },
+  ): Promise<{ runId: string }>;
+  batchReleaseDeploy(request: BatchDeployRequest): Promise<{ operationId: string; results: BatchOperationItemResult[] }>;
+  getReleaseCanary(pipeline: string): Promise<CanaryDeployment | null>;
+  preCheckReleaseCanarySwitch(pipeline: string): Promise<CanarySwitchPreCheck>;
+  shiftReleaseTraffic(
+    pipeline: string,
+    weights: Record<string, number>,
+    meta?: unknown
+  ): Promise<BatchOperationItemResult>;
+  batchShiftReleaseTraffic(request: BatchTrafficShiftRequest): Promise<{ operationId: string; results: BatchOperationItemResult[] }>;
+  submitReleasePipelineRunInput(
+    pipelineName: string,
+    runId: string,
+    nodeId: string,
+    stepId: string,
+    inputId: string,
+    abort: boolean,
+    jenkinsBuildId?: string
+  ): Promise<void>;
+  getReleaseTrafficLogs(pipeline: string): Promise<TrafficChangeLog[]>;
+  checkReleaseRollback(module: string, image: string): Promise<{ canRollback: boolean; reason?: string }>;
 
   /** 切换工作区前释放 WebSocket / 监听器（HTTP 数据源实现） */
   dispose?(): void;

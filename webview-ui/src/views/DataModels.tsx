@@ -236,7 +236,7 @@ export function DataModels() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
         <DataModelAiPromptPanel />
         <LoadingSkeleton variant="card" lines={6} />
       </div>
@@ -245,7 +245,7 @@ export function DataModels() {
 
   if (loadError) {
     return (
-      <div className="space-y-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
         <DataModelAiPromptPanel />
         <ErrorState
           title="无法加载数据模型"
@@ -258,7 +258,7 @@ export function DataModels() {
 
   if (!dataModels || tables.length === 0) {
     return (
-      <div className="space-y-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
         <DataModelAiPromptPanel />
         <EmptyState
           title="暂无数据模型"
@@ -270,7 +270,7 @@ export function DataModels() {
   }
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto lg:flex-row">
       <div className="min-w-0 flex-1 space-y-3">
         <DataModelAiPromptPanel />
 

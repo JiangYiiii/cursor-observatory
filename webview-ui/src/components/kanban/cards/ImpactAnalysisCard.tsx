@@ -1,6 +1,3 @@
-import {
-  impactAnalysisGitMetadataIsPlaceholder,
-} from "@/lib/impact-freshness";
 import type { DataFreshness, ImpactAnalysisResult } from "@/types/observatory";
 
 type Props = {
@@ -43,43 +40,25 @@ export function ImpactAnalysisCard({
             分析影响
           </button>
           {impact ? (
-            <button
-              type="button"
-              onClick={onViewDetail}
-              className="rounded-md border border-zinc-200 px-2 py-1 text-[10px] font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            >
-              查看详情
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onReanalyze}
+                className="rounded-md border border-indigo-200 px-2 py-1 text-[10px] font-medium text-indigo-800 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-200 dark:hover:bg-indigo-950/40"
+              >
+                重新分析
+              </button>
+              <button
+                type="button"
+                onClick={onViewDetail}
+                className="rounded-md border border-zinc-200 px-2 py-1 text-[10px] font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                查看详情
+              </button>
+            </>
           ) : null}
         </div>
       </div>
-      {freshness === "stale" && impact ? (
-        <div className="mb-2 space-y-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-          <div className="flex flex-wrap items-center gap-2">
-            <span>工作元数据与当前仓库不一致，影响分析视为已过期。</span>
-            <button
-              type="button"
-              onClick={onReanalyze}
-              className="font-medium underline"
-            >
-              重新分析
-            </button>
-          </div>
-          {impactAnalysisGitMetadataIsPlaceholder(impact) ? (
-            <p className="text-[10px] text-amber-950/90 dark:text-amber-50/90">
-              当前 JSON 中{" "}
-              <code className="rounded bg-amber-100/80 px-0.5 dark:bg-amber-900/40">
-                working_tree_fingerprint
-              </code>{" "}
-              为占位符，未经过扩展注入真实 Git 状态。请通过面板流程重新保存（或让助手走扩展校验落盘），以同步指纹并生成
-              <code className="rounded bg-amber-100/80 px-0.5 dark:bg-amber-900/40">
-                impact-analysis.md
-              </code>
-              。
-            </p>
-          ) : null}
-        </div>
-      ) : null}
       {freshness === "missing" && !impact ? (
         <p className="mb-2 text-[10px] text-zinc-500">
           尚未生成影响分析。点击「分析影响」让 AI 产出{" "}
@@ -112,9 +91,9 @@ export function ImpactAnalysisCard({
         </div>
       </div>
       <p className="mt-2 text-[10px] text-zinc-500">
-        新鲜度：
+        状态：
         <span className="ml-1 font-medium text-zinc-700 dark:text-zinc-200">
-          {freshness}
+          {freshness === "missing" ? "未生成" : "已加载"}
         </span>
       </p>
     </section>

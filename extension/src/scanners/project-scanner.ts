@@ -112,7 +112,7 @@ export async function runFullScan(
     observatory: {
       initialized_at: now,
       last_full_scan: now,
-      extension_version: "0.1.0",
+      extension_version: "0.1.1",
       scanners_used: scannersUsed,
       sdd_detected: sddRows.length > 0,
       sdd_feature_count: sddRows.length,

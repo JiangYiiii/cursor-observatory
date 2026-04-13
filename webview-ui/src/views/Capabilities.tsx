@@ -216,14 +216,14 @@ export function Capabilities() {
       </div>
 
       <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
-        <aside className="w-80 shrink-0 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-[#2a2a3c]">
+        <aside className="min-h-0 w-80 shrink-0 overflow-y-auto overscroll-contain rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-[#2a2a3c]">
           <RequirementList
             capabilities={filtered}
             selectedId={selectedId}
             onSelect={(c) => setSelectedId(c.id)}
           />
         </aside>
-        <main className="min-w-0 flex-1 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-[#2a2a3c]">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-[#2a2a3c]">
           <RequirementDetail
             capability={selected}
             testResults={testResults}

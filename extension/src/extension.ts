@@ -19,8 +19,10 @@ import {
 import { extraMessageForSddSummary } from "./sdd-scan-messages";
 import { CapabilityTreeProvider } from "./tree/capability-tree-provider";
 import { openObservatoryDashboardPanel } from "./webview/panel-provider";
+import { getUtTestFramework } from "./observatory/observatory-config";
 import { resolveSddFeatureObservatoryDir } from "./observatory/sdd-test-paths";
 import { ObservatoryRegistry } from "./workspace/observatory-registry";
+import { ReleaseHandler } from "./release/release-handler";
 
 const CMD = {
   initialize: "observatory.initialize",
@@ -41,7 +43,11 @@ export async function activate(
   const output = vscode.window.createOutputChannel("Observatory");
   context.subscriptions.push(output);
 
+  const releaseHandler = new ReleaseHandler(context);
+
   registry = new ObservatoryRegistry(context, output);
+  registry.setReleaseHandler(releaseHandler);
+
   const treeProvider = new CapabilityTreeProvider(
     () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     (r) => registry!.getStore(r)
@@ -175,9 +181,9 @@ export async function activate(
     }),
     vscode.commands.registerCommand(CMD.runTests, () => {
       const root = getPrimaryRoot();
-      const fw = vscode.workspace
-        .getConfiguration("observatory")
-        .get<TestFrameworkSetting>("test.framework", "auto");
+      const fw = getUtTestFramework(
+        vscode.workspace.getConfiguration("observatory")
+      ) as TestFrameworkSetting;
       const stack = root
         ? resolveTestStack(root, fw)
         : "unknown";
@@ -203,6 +209,24 @@ export async function activate(
       } catch (e) {
         void vscode.window.showErrorMessage(`Observatory: ${String(e)}`);
       }
+    }),
+    vscode.commands.registerCommand("observatory.release.setCicdToken", async () => {
+      const token = await vscode.window.showInputBox({
+        prompt: "输入 CICD Cookie / Token",
+        password: true,
+        placeHolder: "从浏览器 DevTools 或 curl 中复制的 Cookie 值",
+      });
+      if (token) {
+        await releaseHandler.setCicdToken(token);
+        void vscode.window.showInformationMessage("Observatory: CICD Token 已保存。");
+      }
+    }),
+    vscode.commands.registerCommand("observatory.release.clearCicdToken", async () => {
+      await releaseHandler.clearCicdToken();
+      void vscode.window.showInformationMessage("Observatory: CICD Token 已清除。");
+    }),
+    vscode.commands.registerCommand("observatory.release.openPanel", () => {
+      void vscode.commands.executeCommand(CMD.openDashboard);
     }),
     vscode.commands.registerCommand(CMD.openDataModelAiPrompt, async () => {
       const root = getPrimaryRoot();

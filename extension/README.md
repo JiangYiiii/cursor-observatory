@@ -71,7 +71,7 @@
 | `observatory.transcript.agentTranscriptsPath` | 空 | 手动指定 Agent 转录目录；空则按 `~/.cursor/projects/<slug>/agent-transcripts` 等规则探测 |
 | `observatory.capability.aiPhaseInferenceEnabled` | `true` | 是否根据会话文本推断能力阶段 |
 | `observatory.capability.autoCompleteOnTestsPass` | `true` | 导入测试结果且 `by_capability` 全通过时是否标为已完成 |
-| `observatory.test.autoIngestTestReport` | `true` | 集成终端 pytest / mvn / gradlew 测试结束后是否自动导入；SDD 优先较新 `specs/<active>/observatory/report.json`（先于 JUnit XML）。另监听 `specs/**/observatory/report.json` 与兼容 `test/` 保存（去抖同 `scan.debounceMs`）。旧键 `autoIngestPytestReport` 仍兼容 |
+| `observatory.utTest.autoIngest` | `true` | 集成终端 pytest / mvn / gradlew 测试结束后是否自动导入；SDD 优先较新 `specs/<active>/observatory/report.json`（先于 JUnit XML）。另监听 `specs/**/observatory/report.json` 与兼容 `test/` 保存（去抖同 `scan.debounceMs`）。旧键 `test.autoIngestTestReport` / `test.autoIngestPytestReport` 仍兼容 |
 | `observatory.onboarding.createCursorRule` | `true` | Initialize 时是否创建 `observatory-project.mdc` |
 
 **Git 与「已发布」**：提交说明中单独一行写 `Observatory: cap-id-one,cap-id-two` 或 `能力: cap-id-one,cap-id-two`，扩展可将对应能力标为 **released**。
@@ -80,7 +80,7 @@
 
 **部署默认服务**：设置 **`observatory.deploy.defaultServiceList`**（英文逗号分隔）后，与需求面板中手工填写的 **`deployServiceList`** 合并，在影响分析未列出应用服务时仍可用于部署 Prompt。
 
-**Cheetah MCP**：设置 **`observatory.mcp.cheetah`** 为服务名后，TAPD 链接旁的「分支工作流」复制内容会引用该标识。
+**Cheetah MCP**：设置 **`observatory.deploy.cheetahMcp`** 为服务名后，TAPD 链接旁的「分支工作流」复制内容会引用该标识（旧键 `mcp.cheetah` 仍兼容）。
 
 ---
 

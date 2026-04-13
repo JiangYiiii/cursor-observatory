@@ -2,7 +2,7 @@
   "name": "cursor-observatory",
   "displayName": "Cursor Observatory",
   "description": "AI 开发可观测：SDD 需求面板、影响分析/测试用例校验、泳道部署提示、能力阶段与 Agent 转录、数据模型引导、.observatory 数据层与仪表盘。AI dev observability: SDD requirement panel, impact analysis, deploy prompts, capability phases, transcripts, dashboard.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "cursor-observatory",
   "license": "MIT",
   "engines": {
@@ -31,7 +31,10 @@
     "onCommand:observatory.ingestPytestReport",
     "onCommand:observatory.showInDashboard",
     "onCommand:observatory.openDataModelAiPrompt",
-    "onCommand:observatory.configureSdd"
+    "onCommand:observatory.configureSdd",
+    "onCommand:observatory.release.setCicdToken",
+    "onCommand:observatory.release.clearCicdToken",
+    "onCommand:observatory.release.openPanel"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -67,6 +70,18 @@
       {
         "command": "observatory.configureSdd",
         "title": "Observatory: Configure SDD Integration"
+      },
+      {
+        "command": "observatory.release.setCicdToken",
+        "title": "Observatory: Set CICD Token"
+      },
+      {
+        "command": "observatory.release.clearCicdToken",
+        "title": "Observatory: Clear CICD Token"
+      },
+      {
+        "command": "observatory.release.openPanel",
+        "title": "Observatory: Open Release Panel"
       }
     ],
     "viewsContainers": {
@@ -104,25 +119,15 @@
           "default": 5000,
           "description": "Debounce window for file change scanning (ms)."
         },
-        "observatory.scan.ignorePaths": {
-          "type": "array",
-          "items": { "type": "string" },
-          "default": ["node_modules", ".venv", "__pycache__"],
-          "description": "Path segments to ignore when scanning."
-        },
-        "observatory.git.watchEnabled": {
-          "type": "boolean",
-          "default": true
-        },
-        "observatory.transcript.watchEnabled": {
+        "observatory.onboarding.createCursorRule": {
           "type": "boolean",
           "default": true,
-          "description": "监听 Agent 转录目录中的 .jsonl 变更。"
+          "description": "执行 Initialize Project 时，若不存在则创建 .cursor/rules/observatory-project.mdc。"
         },
-        "observatory.transcript.agentTranscriptsPath": {
+        "observatory.prompt.templateDir": {
           "type": "string",
           "default": "",
-          "description": "手动指定 agent-transcripts 目录绝对路径；留空则按 ~/.cursor/projects/<工作区路径转 slug>/agent-transcripts 等规则自动探测。可使用 ${workspaceFolder}。"
+          "description": "自定义 prompt 模板目录路径，支持 ${workspaceFolder}。目录下按阶段命名：specify.md、plan.md、tasks.md、implement.md、analyze.md、impact-analysis.md、ut-test.md、code-submit.md、deploy.md、test-case.md。未找到则使用内置默认。"
         },
         "observatory.capability.aiPhaseInferenceEnabled": {
           "type": "boolean",
@@ -139,82 +144,230 @@
           "default": true,
           "description": "SDD 能力处于「测试中」且测试结果按能力维度全通过时，是否标为「已完成」。为 false 时 SDD 仅由 specs 扫描改阶段（与旧行为一致）。"
         },
-        "observatory.capability.sddTestingCompleteOnPytestPass": {
-          "type": "boolean",
-          "default": true,
-          "description": "Deprecated: use observatory.capability.sddTestingCompleteOnTestPass.",
-          "deprecationMessage": "Renamed to observatory.capability.sddTestingCompleteOnTestPass"
-        },
-        "observatory.onboarding.createCursorRule": {
-          "type": "boolean",
-          "default": true,
-          "description": "执行 Initialize Project 时，若不存在则创建 .cursor/rules/observatory-project.mdc。"
-        },
-        "observatory.test.framework": {
+        "observatory.sddArtifacts.analyzeSkill": {
           "type": "string",
-          "enum": ["auto", "pytest", "jest", "junit"],
+          "default": "",
+          "description": "SDD 产物分析（analyze）阶段：显式 skill 路径，如 .cursor/skills/analyze/SKILL.md。留空时自动检测项目中的 skill，仍无则使用内置默认 prompt。"
+        },
+        "observatory.utTest.framework": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "pytest",
+            "jest",
+            "junit"
+          ],
           "default": "auto",
-          "description": "Run Tests 命令的提示取向：auto 按仓库文件（pom/build.gradle/pyproject/package.json）粗判；其余为强制提示对应栈。"
+          "description": "单元测试卡片 / Run Tests：提示取向。auto 按仓库文件（pom/build.gradle/pyproject/package.json）粗判；其余为强制提示对应栈。"
         },
-        "observatory.test.autoDetectResults": {
-          "type": "boolean",
-          "default": true
-        },
-        "observatory.test.autoIngestTestReport": {
+        "observatory.utTest.autoIngest": {
           "type": "boolean",
           "default": true,
-          "description": "集成终端中 pytest / mvn test / gradlew test 结束后，若存在较新的测试报告则自动导入（需 Shell Integration；SDD 优先 specs/<active>/test/）。"
+          "description": "集成终端中 pytest / mvn test / gradlew test 结束后，若存在较新的测试报告则自动导入（需 Shell Integration；SDD 优先 specs/<active>/observatory/）。"
         },
-        "observatory.test.autoIngestPytestReport": {
-          "type": "boolean",
-          "default": true,
-          "description": "Deprecated: use observatory.test.autoIngestTestReport.",
-          "deprecationMessage": "Renamed to observatory.test.autoIngestTestReport"
-        },
-        "observatory.prompt.templateDir": {
+        "observatory.codeSubmit.skill": {
           "type": "string",
           "default": "",
-          "description": "自定义 prompt 模板目录路径，支持 ${workspaceFolder}。目录下按阶段命名：specify.md、plan.md、tasks.md、implement.md、analyze.md、impact-analysis.md、ut-test.md、code-submit.md、deploy.md、test-case.md。未找到则使用内置默认。"
-        },
-        "observatory.skill.analyze": {
-          "type": "string",
-          "default": "",
-          "description": "SDD analyze skill 路径，如 .cursor/skills/analyze/SKILL.md。留空时自动检测项目中的 skill，仍无则使用内置默认 prompt。"
-        },
-        "observatory.skill.codeSubmit": {
-          "type": "string",
-          "default": "",
-          "description": "code-submit skill 路径。留空时自动检测项目中的 skill，仍无则使用内置默认 prompt。"
-        },
-        "observatory.mcp.cicd": {
-          "type": "string",
-          "default": "",
-          "description": "CICD MCP 服务名，如 cicd-feature-branch。仅保存服务标识，不保存 token 或完整 URL。"
-        },
-        "observatory.mcp.testRunner": {
-          "type": "string",
-          "default": "",
-          "description": "测试执行 MCP 服务名，如 lego。仅保存服务标识，不保存 token 或完整 URL。"
-        },
-        "observatory.mcp.cicdTool": {
-          "type": "string",
-          "default": "swimlane_deploy",
-          "description": "CICD MCP 默认调用工具名。"
-        },
-        "observatory.mcp.cheetah": {
-          "type": "string",
-          "default": "",
-          "description": "Cheetah（泳道/OpenAPI）MCP 服务名，供需求面板「分支工作流」提示中的 AI 使用；仅标识名，不含密钥。"
+          "description": "代码提交卡片：code-submit skill 路径。留空时自动检测项目中的 skill，仍无则使用内置默认 prompt。"
         },
         "observatory.deploy.defaultServiceList": {
           "type": "string",
           "default": "",
           "description": "环境部署卡片默认影响服务列表（英文逗号分隔）。当影响分析未扫到应用服务时，与需求级手工列表合并展示。"
         },
+        "observatory.deploy.mcpService": {
+          "type": "string",
+          "default": "",
+          "description": "环境部署卡片：CICD MCP 服务名，如 cicd-feature-branch。仅保存服务标识，不保存 token 或完整 URL。"
+        },
+        "observatory.deploy.mcpTool": {
+          "type": "string",
+          "default": "swimlane_deploy",
+          "description": "环境部署卡片：CICD MCP 默认调用工具名。"
+        },
+        "observatory.deploy.cheetahMcp": {
+          "type": "string",
+          "default": "",
+          "description": "环境部署 / 需求链接：Cheetah（泳道/OpenAPI）MCP 服务名，供「分支工作流」提示中的 AI 使用；仅标识名，不含密钥。"
+        },
+        "observatory.testCases.mcpService": {
+          "type": "string",
+          "default": "",
+          "description": "测试用例卡片：测试执行 MCP 服务名，如 lego。仅保存服务标识，不保存 token 或完整 URL。"
+        },
+        "observatory.testCases.mcpTool": {
+          "type": "string",
+          "default": "run_test_case",
+          "description": "测试用例卡片：测试执行 MCP 默认调用工具名。"
+        },
+        "observatory.git.watchEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "监听 Git 变更以更新进度等（进度视图）。"
+        },
+        "observatory.transcript.watchEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "监听 Agent 转录目录中的 .jsonl 变更。"
+        },
+        "observatory.transcript.agentTranscriptsPath": {
+          "type": "string",
+          "default": "",
+          "description": "手动指定 agent-transcripts 目录绝对路径；留空则按 ~/.cursor/projects/<工作区路径转 slug>/agent-transcripts 等规则自动探测。可使用 ${workspaceFolder}。"
+        },
+        "observatory.docs.root": {
+          "type": "string",
+          "default": "docs",
+          "description": "相对工作区根目录的文档根目录（用于文档浏览、ai-doc-index 与语义索引 glob）。"
+        },
+        "observatory.docs.aiDocIndexRelativePath": {
+          "type": "string",
+          "default": "00-meta/ai-doc-index.json",
+          "description": "相对文档根的 AI 文档索引路径（ai-doc-index.json）。"
+        },
+        "observatory.docs.semanticIndexGlob": {
+          "type": "string",
+          "default": "**/meta/ai-index*.json",
+          "description": "相对文档根、用于发现语义锚点 JSON 的 glob（如 repay 式 meta/ai-index-*.json）。"
+        },
+        "observatory.release.cicdBaseUrl": {
+          "type": "string",
+          "default": "https://cicd.fintopia.tech",
+          "description": "CICD 平台 Base URL"
+        },
+        "observatory.release.devopsProject": {
+          "type": "string",
+          "default": "cash-loanjqjjq",
+          "description": "CICD DevOps 项目标识（namespace）"
+        },
+        "observatory.release.workspace": {
+          "type": "string",
+          "default": "cashloan",
+          "description": "CICD 工作区标识"
+        },
+        "observatory.release.cluster": {
+          "type": "string",
+          "default": "prod",
+          "description": "部署目标集群"
+        },
+        "observatory.release.project": {
+          "type": "string",
+          "default": "cash-loan",
+          "description": "项目名，用于查询镜像和发布单"
+        },
+        "observatory.release.operator": {
+          "type": "string",
+          "default": "",
+          "description": "操作人标识，用于切流事件上报"
+        },
+        "observatory.release.pipelineFilter": {
+          "type": "string",
+          "default": "prod",
+          "description": "流水线名称过滤关键词"
+        },
+        "observatory.release.autoPolling": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否启用自动轮询流水线状态"
+        },
+        "observatory.release.batchConcurrency": {
+          "type": "number",
+          "default": 3,
+          "description": "批量部署/切流操作的并发度"
+        },
+        "observatory.release.notifications": {
+          "type": "string",
+          "enum": [
+            "all",
+            "errors-only",
+            "none"
+          ],
+          "default": "all",
+          "description": "流水线状态变化通知级别"
+        },
+        "observatory.release.stageInferenceRules": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string"
+              },
+              "stageType": {
+                "type": "string"
+              },
+              "actionKind": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "节点名到阶段类型的推断规则，格式: [{pattern, stageType, actionKind}]"
+        },
+        "observatory.release.pipelineMetadataMap": {
+          "type": "object",
+          "default": {},
+          "description": "流水线元数据统一映射（含 moduleName/fullModuleName/repoName/pipelineType/hasCanary/deploymentName/deployOrder）"
+        },
+        "observatory.skill.analyze": {
+          "type": "string",
+          "default": "",
+          "description": "Deprecated: use observatory.sddArtifacts.analyzeSkill.",
+          "deprecationMessage": "Use observatory.sddArtifacts.analyzeSkill instead."
+        },
+        "observatory.skill.codeSubmit": {
+          "type": "string",
+          "default": "",
+          "description": "Deprecated: use observatory.codeSubmit.skill.",
+          "deprecationMessage": "Use observatory.codeSubmit.skill instead."
+        },
+        "observatory.mcp.cicd": {
+          "type": "string",
+          "default": "",
+          "description": "Deprecated: use observatory.deploy.mcpService.",
+          "deprecationMessage": "Use observatory.deploy.mcpService instead."
+        },
+        "observatory.mcp.cicdTool": {
+          "type": "string",
+          "default": "swimlane_deploy",
+          "description": "Deprecated: use observatory.deploy.mcpTool.",
+          "deprecationMessage": "Use observatory.deploy.mcpTool instead."
+        },
+        "observatory.mcp.cheetah": {
+          "type": "string",
+          "default": "",
+          "description": "Deprecated: use observatory.deploy.cheetahMcp.",
+          "deprecationMessage": "Use observatory.deploy.cheetahMcp instead."
+        },
+        "observatory.mcp.testRunner": {
+          "type": "string",
+          "default": "",
+          "description": "Deprecated: use observatory.testCases.mcpService.",
+          "deprecationMessage": "Use observatory.testCases.mcpService instead."
+        },
         "observatory.mcp.testRunnerTool": {
           "type": "string",
           "default": "run_test_case",
-          "description": "测试执行 MCP 默认调用工具名。"
+          "description": "Deprecated: use observatory.testCases.mcpTool.",
+          "deprecationMessage": "Use observatory.testCases.mcpTool instead."
+        },
+        "observatory.test.framework": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "pytest",
+            "jest",
+            "junit"
+          ],
+          "default": "auto",
+          "description": "Deprecated: use observatory.utTest.framework.",
+          "deprecationMessage": "Use observatory.utTest.framework instead."
+        },
+        "observatory.test.autoIngestTestReport": {
+          "type": "boolean",
+          "default": true,
+          "description": "Deprecated: use observatory.utTest.autoIngest.",
+          "deprecationMessage": "Use observatory.utTest.autoIngest instead."
         }
       }
     }

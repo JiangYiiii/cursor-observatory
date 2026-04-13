@@ -95,7 +95,10 @@ export async function getCurrentGitState(
   return { branch, headCommit, fingerprint };
 }
 
-async function inferBaseRef(
+/**
+ * 解析与当前 HEAD 对比用的上游 ref：优先 `@{u}`，其次常见远端主分支候选。
+ */
+export async function resolveCompareUpstreamRef(
   git: SimpleGit,
   override?: string
 ): Promise<string | undefined> {
@@ -189,7 +192,7 @@ export async function getChangedFiles(
     headOk = false;
   }
 
-  const base = await inferBaseRef(git, options?.baseRefOverride);
+  const base = await resolveCompareUpstreamRef(git, options?.baseRefOverride);
   if (headOk && base) {
     try {
       const mb = (await git.raw(["merge-base", base, "HEAD"])).trim();

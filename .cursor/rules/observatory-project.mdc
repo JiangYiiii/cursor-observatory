@@ -26,4 +26,4 @@ globs:
 
 - **SDD**：扩展将规范化结果写入 **`specs/<active>/observatory/report.json`**（目录名在磁盘上亦可能为 **`Observatory`**，扩展会解析；并兼容写入同目录 **`test-results.json`**；该目录建议 gitignore）。Python 可将 **pytest-json-report** 原始输出写到 **`specs/<active>/observatory/pytest-report.json`** 供自动导入。无 SDD 时可在根 **`.observatory/report.json`**（及兼容旧名 **`pytest-report.json`**）。兼容读取旧路径 **`specs/<feature>/test/`**、**`specs/<feature>/.observatory/`**。
 - **Java**：`mvn test` / `gradlew test` 后扩展**优先**自动导入较新的 SDD **`specs/<active>/observatory/report.json`**（规范化 JSON，含 `by_capability` 时与手点 Import 等价），否则聚合 Surefire **`TEST-*.xml`**；亦可 **Observatory: Import Test Report** 手动选择 JSON/XML。保存 `specs/.../observatory/report.json`（或兼容 `test/`）时也会去抖后自动导入（与终端短窗口去重）。
-- 设置 **`observatory.test.autoIngestTestReport`**（旧键 `autoIngestPytestReport` 仍兼容）控制集成终端结束与上述文件保存后是否自动导入。
+- 设置 **`observatory.utTest.autoIngest`**（旧键 `observatory.test.autoIngestTestReport` / `test.autoIngestPytestReport` 仍兼容）控制集成终端结束与上述文件保存后是否自动导入。

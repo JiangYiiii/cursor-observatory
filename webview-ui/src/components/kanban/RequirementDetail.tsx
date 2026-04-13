@@ -24,7 +24,7 @@ import {
   generateImpactAnalysisPrompt,
   generateImplementPrompt,
   generatePlanPrompt,
-  generateReleasePrompt,
+  generateReleasePromptAsync,
   generateTapdStoryFetchPrompt,
   generateTasksPrompt,
   generateTestCasesPrompt,
@@ -314,23 +314,14 @@ export function RequirementDetail({
     }
   }, [aiContextText]);
 
-  const gitSnap = useMemo(() => {
-    if (!gitInfo) return null;
-    return {
-      branch: gitInfo.branch,
-      headCommit: gitInfo.headCommit,
-      workingTreeFingerprint: gitInfo.workingTreeFingerprint,
-    };
-  }, [gitInfo]);
-
   const impactFreshness = useMemo(
-    () => computeImpactFreshness(impactAnalysis, gitSnap),
-    [impactAnalysis, gitSnap]
+    () => computeImpactFreshness(impactAnalysis),
+    [impactAnalysis]
   );
 
   const testCasesFreshness = useMemo(
-    () => computeTestCasesFreshness(testCases, impactAnalysis, gitSnap),
-    [testCases, impactAnalysis, gitSnap]
+    () => computeTestCasesFreshness(testCases),
+    [testCases]
   );
 
   const changedFilesHint = useMemo(() => {
@@ -391,7 +382,7 @@ export function RequirementDetail({
   const openImpactMd = useCallback(async () => {
     if (!feature) return;
     setMdTitle("影响分析（Markdown）");
-    setMdFreshness(impactFreshness === "fresh" ? "fresh" : "stale");
+    setMdFreshness("fresh");
     try {
       const md =
         (await getDataSource().getImpactAnalysisMd(feature)) ??
@@ -402,12 +393,12 @@ export function RequirementDetail({
       setMdContent("读取失败");
       setMdOpen(true);
     }
-  }, [feature, impactFreshness]);
+  }, [feature]);
 
   const openTestCasesMd = useCallback(async () => {
     if (!feature) return;
     setMdTitle("测试用例（Markdown）");
-    setMdFreshness(testCasesFreshness === "fresh" ? "fresh" : "stale");
+    setMdFreshness("fresh");
     try {
       const md =
         (await getDataSource().getTestCasesMd(feature)) ??
@@ -418,7 +409,7 @@ export function RequirementDetail({
       setMdContent("读取失败");
       setMdOpen(true);
     }
-  }, [feature, testCasesFreshness]);
+  }, [feature]);
 
   const handleSaveRequirementUrl = useCallback(
     async (next: string) => {
@@ -537,7 +528,10 @@ export function RequirementDetail({
                 <button
                   type="button"
                   onClick={() =>
-                    openPrompt("标记已发布", generateReleasePrompt(cap))
+                    void openPromptAsync(
+                      "发布说明 / 准入准出",
+                      generateReleasePromptAsync(cap)
+                    )
                   }
                   className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
                 >
@@ -611,7 +605,8 @@ export function RequirementDetail({
           showTest={showTest}
           testStats={testStats}
           impactScenarioTotal={impactAnalysis?.summary?.total_scenarios ?? 0}
-          impactFreshness={impactFreshness}
+          hasImpactAnalysis={Boolean(impactAnalysis)}
+          hasTestCasesFile={Boolean(testCases)}
           onRunTest={() =>
             openPrompt(
               "执行测试",
@@ -644,7 +639,6 @@ export function RequirementDetail({
             onDeployServicesDraftChange={setDeployServicesDraft}
             onBlurSaveDeployServices={handleSaveDeployServicesBlur}
             extensionDefaultServices={deploySettings.defaultServiceList}
-            impactFreshness={impactFreshness}
             preflight={preflight}
             onDeployPrompt={() =>
               openPrompt(

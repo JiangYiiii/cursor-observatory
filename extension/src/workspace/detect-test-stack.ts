@@ -1,5 +1,5 @@
 /**
- * 按仓库根文件与设置 `observatory.test.framework` 粗判主测试栈。
+ * 按仓库根文件与设置 `observatory.utTest.framework`（旧键 `test.framework` 仍兼容）粗判主测试栈。
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -62,7 +62,7 @@ export function detectTestStackFromFiles(workspaceRoot: string): TestStack {
 }
 
 /**
- * 结合 `observatory.test.framework` 与仓库文件。
+ * 结合 `observatory.utTest.framework` 与仓库文件。
  */
 export function resolveTestStack(
   workspaceRoot: string,

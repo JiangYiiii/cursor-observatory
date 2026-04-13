@@ -12,8 +12,19 @@ import {
 } from "../observatory/errors";
 import { getDataModelAiPromptMarkdown } from "../observatory/project-onboarding";
 import { getGitInfoSummary } from "../observatory/git-info-summary";
+import { getReleaseDiffPayload } from "../observatory/git-release-diff";
+import { getDeployCheetahMcp } from "../observatory/observatory-config";
 import { loadPromptTemplate } from "../observatory/prompt-template-loader";
 import { runPreflight } from "../observatory/preflight-resolver";
+import { getObservatoryDocsSettings, resolveDocsDirAbs, safeUnderRoot } from "../observatory/docs-config";
+import {
+  getDocsTree,
+  readDocsFileUtf8,
+  parseDocsRelativePathParam,
+  readDocsCatalogIfExists,
+  listAiIndexSummaries,
+} from "../observatory/workspace-docs";
+import { resolveRegisteredStore } from "../observatory/workspace-root-resolve";
 import {
   readObservatorySddConfigMerged,
   writeObservatorySddConfigMerged,
@@ -27,6 +38,7 @@ import {
 } from "../observatory/validation-pipeline";
 import { runSingleSddFeatureScan } from "../scanners/project-scanner";
 import type { TestExpectations } from "../observatory/types";
+import type { ReleaseHandler } from "../release/release-handler";
 
 const REQUEST = "observatory-request";
 const RESPONSE = "observatory-response";
@@ -96,7 +108,8 @@ async function readTestHistoryLines(store: ObservatoryStore): Promise<unknown[]>
  */
 export async function handleObservatoryBridgeMessage(
   raw: unknown,
-  getStore: GetObservatoryStore
+  getStore: GetObservatoryStore,
+  releaseHandler?: ReleaseHandler,
 ): Promise<BridgeResponseMsg | null> {
   if (!isBridgeRequest(raw)) return null;
 
@@ -118,7 +131,7 @@ export async function handleObservatoryBridgeMessage(
     };
   }
 
-  const store = getStore(path.normalize(rootRaw));
+  const store = resolveRegisteredStore(getStore, rootRaw);
   if (!store) {
     const ep: ObservatoryErrorPayload = {
       code: "NOT_FOUND",
@@ -136,7 +149,7 @@ export async function handleObservatoryBridgeMessage(
   }
 
   try {
-    const data = await dispatch(store, method, params);
+    const data = await dispatch(store, method, params, releaseHandler);
     return { type: RESPONSE, requestId, ok: true, data };
   } catch (e) {
     const payload =
@@ -154,7 +167,8 @@ export async function handleObservatoryBridgeMessage(
 async function dispatch(
   store: ObservatoryStore,
   method: string,
-  params?: Record<string, unknown>
+  params?: Record<string, unknown>,
+  releaseHandler?: ReleaseHandler,
 ): Promise<unknown> {
   switch (method) {
     case "getManifest":
@@ -254,7 +268,7 @@ async function dispatch(
       const uri = vscode.Uri.file(store.workspaceRoot);
       const cfg = vscode.workspace.getConfiguration("observatory", uri);
       const raw = cfg.get<string>("deploy.defaultServiceList", "") ?? "";
-      const cheetah = cfg.get<string>("mcp.cheetah", "") ?? "";
+      const cheetah = getDeployCheetahMcp(cfg);
       return { defaultServiceList: raw, cheetahMcpService: cheetah };
     }
     case "getImpactAnalysis": {
@@ -319,8 +333,45 @@ async function dispatch(
       }
       return loadPromptTemplate(store.workspaceRoot, stage);
     }
+    case "docs.getConfig": {
+      const s = getObservatoryDocsSettings(store.workspaceRoot);
+      return {
+        docsRoot: s.docsRoot,
+        aiDocIndexRelativePath: s.aiDocIndexRelativePath,
+        semanticIndexGlob: s.semanticIndexGlob,
+      };
+    }
+    case "docs.listTree":
+      return getDocsTree(store.workspaceRoot);
+    case "docs.readFile": {
+      const raw = params?.relativePath;
+      const posix = parseDocsRelativePathParam(
+        typeof raw === "string" ? raw : ""
+      );
+      return readDocsFileUtf8(store.workspaceRoot, posix);
+    }
+    case "docs.getCatalog":
+      return readDocsCatalogIfExists(store.workspaceRoot);
+    case "docs.listAiIndices":
+      return listAiIndexSummaries(store.workspaceRoot);
+    case "workspace.openFile": {
+      const raw = params?.relativePath;
+      const posix = parseDocsRelativePathParam(
+        typeof raw === "string" ? raw : ""
+      );
+      const docsDir = resolveDocsDirAbs(store.workspaceRoot);
+      const full = path.resolve(docsDir, posix);
+      if (!safeUnderRoot(docsDir, full)) {
+        throw new Error("path escapes docs root");
+      }
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(full));
+      await vscode.window.showTextDocument(doc);
+      return { ok: true };
+    }
     case "getGitInfo":
       return getGitInfoSummary(store.workspaceRoot);
+    case "getReleaseDiff":
+      return getReleaseDiffPayload(store.workspaceRoot);
     case "getPreflight": {
       const stage = params?.stage;
       if (typeof stage !== "string" || !/^[\w-]+$/.test(stage) || stage.length > 64) {
@@ -347,6 +398,68 @@ async function dispatch(
     case "triggerScan":
     case "triggerTests":
       throw new Error(`method not implemented in bridge: ${method}`);
+
+    // ──────────── Release workflow ────────────
+    case "release.getEnvStatus":
+      return releaseHandler?.getEnvStatus() ?? null;
+    case "release.listPipelines":
+      return releaseHandler?.listPipelines() ?? [];
+    case "release.listStageSummaries":
+      return releaseHandler?.listStageSummaries() ?? [];
+    case "release.getLatestRun":
+      return releaseHandler?.getLatestRun(params?.pipelineName as string) ?? null;
+    case "release.getRunNodes":
+      return releaseHandler?.getRunNodes(params?.runId as string) ?? [];
+    case "release.preCheckCanarySwitch":
+      return releaseHandler?.preCheckCanarySwitch(params?.pipeline as string) ?? {
+        canSwitch: false,
+        reason: "发布处理器未就绪",
+      };
+    case "release.submitPipelineRunInput": {
+      if (!releaseHandler) return null;
+      await releaseHandler.submitPipelineRunInput(
+        params?.pipelineName as string,
+        params?.runId as string,
+        params?.nodeId as string,
+        params?.stepId as string,
+        params?.inputId as string,
+        Boolean(params?.abort),
+        params?.jenkinsBuildId as string | undefined,
+      );
+      return null;
+    }
+    case "release.listImages":
+      return releaseHandler?.listImages(params?.repoName as string) ?? [];
+    case "release.triggerDeploy":
+      return releaseHandler?.triggerDeploy(
+        params?.pipelineName as string,
+        params?.fullModuleName as string,
+        params?.imageTag as string,
+        {
+          ksPipelineType: params?.ksPipelineType as string | undefined,
+          includeCanaryDeployHeader: params?.includeCanaryDeployHeader as boolean | undefined,
+        },
+      ) ?? null;
+    case "release.batchDeploy":
+      return releaseHandler?.batchDeploy(params as any) ?? null;
+    case "release.getCanary":
+      return releaseHandler?.getCanary(params?.pipeline as string) ?? null;
+    case "release.shiftTraffic":
+      return releaseHandler?.shiftTraffic(
+        params?.pipeline as string,
+        params?.weights as Record<string, number>,
+        params?.meta as any,
+      ) ?? null;
+    case "release.batchTrafficShift":
+      return releaseHandler?.batchTrafficShift(params as any) ?? null;
+    case "release.getTrafficLogs":
+      return releaseHandler?.getTrafficLogs(params?.pipeline as string) ?? [];
+    case "release.checkRollback":
+      return releaseHandler?.checkRollback(
+        params?.module as string,
+        params?.image as string,
+      ) ?? null;
+
     default:
       throw new Error(`unknown method: ${method}`);
   }

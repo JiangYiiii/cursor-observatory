@@ -1,5 +1,3 @@
-import type { DataFreshness } from "@/types/observatory";
-
 type TestStats = {
   total: number;
   passed: number;
@@ -12,7 +10,10 @@ type Props = {
   showTest: boolean;
   testStats: TestStats;
   impactScenarioTotal: number;
-  impactFreshness: DataFreshness;
+  /** 是否已有 impact-analysis 数据 */
+  hasImpactAnalysis: boolean;
+  /** 是否已有 test-cases.json */
+  hasTestCasesFile: boolean;
   onRunTest: () => void;
 };
 
@@ -20,7 +21,8 @@ export function UtTestCard({
   showTest,
   testStats,
   impactScenarioTotal,
-  impactFreshness,
+  hasImpactAnalysis,
+  hasTestCasesFile,
   onRunTest,
 }: Props) {
   const denom =
@@ -31,7 +33,9 @@ export function UtTestCard({
     denom > 0
       ? Math.round((testStats.scenarioCovered / denom) * 100)
       : 0;
-  const staleWarn = impactFreshness === "stale" || impactFreshness === "missing";
+
+  const showMissingImpact = !hasImpactAnalysis;
+  const showMissingTestCases = hasImpactAnalysis && !hasTestCasesFile;
 
   return (
     <section className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-600">
@@ -49,9 +53,15 @@ export function UtTestCard({
           </button>
         ) : null}
       </div>
-      {staleWarn ? (
-        <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-          影响分析已过期或缺失：UT Prompt 中的场景对齐可能不准确，请先更新「影响场景分析」。
+      {showMissingImpact ? (
+        <p className="mb-2 rounded border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] text-sky-950 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-100">
+          请先在上方完成「影响场景分析」，以便 UT Prompt 与场景对齐。
+        </p>
+      ) : null}
+      {showMissingTestCases ? (
+        <p className="mb-2 rounded border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] text-sky-950 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-100">
+          尚未生成测试用例文件（<span className="font-mono">test-cases.json</span>
+          ）。可在下方「测试用例」卡片生成后再对齐执行。
         </p>
       ) : null}
       <p className="text-xs text-zinc-600 dark:text-zinc-300">

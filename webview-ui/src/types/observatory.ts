@@ -287,6 +287,73 @@ export interface DocsHealth extends SchemaVersioned {
   checks: DocsHealthCheck[];
 }
 
+/** GET /api/workspace/docs-config 与 bridge docs.getConfig */
+export interface DocsConfigPayload {
+  docsRoot: string;
+  aiDocIndexRelativePath: string;
+  semanticIndexGlob: string;
+}
+
+export type DocsTreeNodeType = "file" | "dir";
+
+export interface DocsTreeNode {
+  name: string;
+  /** 相对文档根，POSIX；根占位可为 "" */
+  relativePath: string;
+  type: DocsTreeNodeType;
+  children?: DocsTreeNode[];
+}
+
+/** GET /api/workspace/docs-tree 与 bridge docs.listTree */
+export interface DocsTreePayload {
+  root: DocsTreeNode;
+  truncated: boolean;
+  docsRootExists: boolean;
+}
+
+/** GET /api/workspace/docs-file 与 bridge docs.readFile */
+export interface DocsFilePayload {
+  relativePath: string;
+  content: string;
+  encoding: "utf-8";
+}
+
+/** docs-catalog.json（00-meta/docs-catalog.json） */
+export interface DocsCatalogTaxonomyItem {
+  id: string;
+  label: string;
+}
+
+export interface DocsCatalogEntry {
+  path: string;
+  title?: string;
+  summary?: string;
+  category_id?: string;
+  doc_kind?: string;
+  tags?: string[];
+  audience?: string[];
+}
+
+export interface DocsCatalogDocument extends SchemaVersioned {
+  generated_at?: string;
+  docs_root?: string;
+  taxonomy?: DocsCatalogTaxonomyItem[];
+  entries?: DocsCatalogEntry[];
+}
+
+export interface AiIndexSummaryItem {
+  relativePath: string;
+  domain?: string;
+  flow?: string;
+  anchorCount: number;
+  docLinks: string[];
+}
+
+export interface DocsAiIndicesPayload {
+  items: AiIndexSummaryItem[];
+  truncated: boolean;
+}
+
 /** sessions/index.json entries（与 docs/SCHEMA_SPEC.md §十二 对齐） */
 export interface SessionIndexEntry extends Record<string, unknown> {
   id: string;
@@ -316,6 +383,29 @@ export type UpdateEvent = {
 };
 
 export type Unsubscribe = () => void;
+
+/** 扩展 `getReleaseDiff`：当前分支相对上游的 diff 摘要（供发布/准入准出 Prompt） */
+export type ReleaseDiffPayload =
+  | {
+      ok: true;
+      currentBranch: string;
+      headCommit: string;
+      upstreamRef: string;
+      mergeBase: string;
+      commitsAhead: number;
+      filesChanged: number;
+      statBlock: string;
+      commitMessagesBlock: string;
+      diffPatch: string;
+      diffTruncated: boolean;
+      workingTreeNote: string;
+    }
+  | {
+      ok: false;
+      reason: string;
+      currentBranch?: string;
+      hint?: string;
+    };
 
 // --- 需求面板 V2（specs/<feature>/observatory-sdd.json & observatory/*.json）---
 
@@ -440,3 +530,197 @@ export interface PreflightResult {
   };
   dataFreshness: Record<string, DataFreshness>;
 }
+
+// ─── Release Workflow Types ───
+
+export type NodeStatus =
+  | "SUCCESS"
+  | "IN_PROGRESS"
+  | "PAUSED"
+  | "NOT_BUILT"
+  | "FAILED"
+  | "ABORTED"
+  /** API 偶发仅给出 result=UNKNOWN；若含 input 会在归一化中视为 PAUSED */
+  | "UNKNOWN";
+
+export type PipelineStageType =
+  | "idle" | "deploying" | "waiting_release" | "waiting_gray_confirm"
+  | "waiting_bluegreen_switch" | "waiting_manual" | "succeeded" | "failed" | "aborted" | "unknown";
+
+export interface PipelineInfo {
+  name: string;
+  displayName?: string;
+  moduleName: string;
+  fullModuleName: string;
+  repoName: string;
+  pipelineType: "canary" | "prod" | "unknown";
+  hasCanary: boolean;
+  /** KubeSphere `pipeline.devops.kubesphere.io/type`；有值时 hasCanary 以 `blue_green` 为准 */
+  ksPipelineType?: string;
+  deployOrder?: number;
+  latestRun?: PipelineRunSummary;
+  currentStage?: PipelineStageSummary;
+  mappingSource?: "config" | "inferred";
+}
+
+export interface PipelineRunSummary {
+  id: string;
+  status: "running" | "succeeded" | "failed" | "paused" | "aborted" | "unknown";
+  startTime?: string;
+  duration?: number;
+  jenkinsBuildId?: string;
+}
+
+export interface PipelineNode {
+  id: string;
+  displayName: string;
+  status: NodeStatus;
+  rawType?: string;
+  startTime?: string;
+  duration?: number;
+  index: number;
+  pauseDescription?: string;
+  requiresAction: boolean;
+  /** PAUSED 且子 step 含 input 时，供流水线继续/终止（inputId 为 Jenkins input UUID） */
+  pausedInput?: { nodeId: string; stepId: string; inputId: string };
+}
+
+export interface CanarySwitchPreCheck {
+  canSwitch: boolean;
+  reason?: string;
+  currentStep?: string;
+  blockedBy?: string;
+}
+
+export interface ReleaseOrderSummary {
+  status: "pending" | "partial" | "approved" | "unknown";
+  confirmedCount?: number;
+  totalCount?: number;
+  url?: string;
+}
+
+export interface ManualActionInfo {
+  kind: "release-order" | "gray-confirm" | "manual-approval" | "bluegreen-confirm" | "custom";
+  title: string;
+  description?: string;
+  externalUrl?: string;
+}
+
+export interface PipelineStageSummary {
+  pipelineName: string;
+  runId?: string;
+  /** Jenkins build 号，提交交互步骤时拼进 API 路径 */
+  jenkinsBuildId?: string;
+  stageType: PipelineStageType;
+  stageLabel: string;
+  waitingReason?: string;
+  currentNodeName?: string;
+  requiresManualAction: boolean;
+  action?: ManualActionInfo;
+  releaseOrder?: ReleaseOrderSummary;
+  updatedAt: string;
+}
+
+export interface ImageTag {
+  tag: string;
+  createdAt?: string;
+  parsed?: {
+    branch: string;
+    buildNumber: string;
+    commitShort: string;
+    buildTime: string;
+  };
+}
+
+export interface CanaryDeployment {
+  namespace: string;
+  name: string;
+  cluster: string;
+  weights: Record<string, number>;
+  blueVersion: string;
+  greenVersion: string;
+  blueWeight: number;
+  greenWeight: number;
+}
+
+export interface TrafficChangeLog {
+  pipeline: string;
+  operator: string;
+  blueVersion: string;
+  greenVersion: string;
+  beforeBlue: number;
+  beforeGreen: number;
+  afterBlue: number;
+  afterGreen: number;
+  timestamp: string;
+}
+
+export interface BatchDeployRequest {
+  operationId: string;
+  dryRun?: boolean;
+  pipelines: {
+    pipelineName: string;
+    fullModuleName: string;
+    imageTag: string;
+    deployOrder?: number;
+    ksPipelineType?: string;
+    includeCanaryDeployHeader?: boolean;
+  }[];
+}
+
+export interface BatchTrafficShiftRequest {
+  operationId: string;
+  shifts: {
+    pipeline: string;
+    namespace: string;
+    deploymentName: string;
+    cluster: string;
+    weights: Record<string, number>;
+    meta: {
+      devopsProject: string;
+      module: string;
+      env: string;
+      blueVersion: string;
+      greenVersion: string;
+      pipelineRunId: string;
+      jenkinsBuildId: string;
+      beforeBlue: number;
+      beforeGreen: number;
+    };
+  }[];
+}
+
+export interface BatchOperationItemResult {
+  pipeline: string;
+  status: "applied" | "skipped" | "conflicted" | "failed" | "cancelled";
+  runId?: string;
+  message?: string;
+  auditStatus?: "not_needed" | "succeeded" | "failed";
+}
+
+export interface ReleaseEnvStatus {
+  configured: boolean;
+  tokenSet: boolean;
+  tokenValid: boolean;
+  baseUrlValid: boolean;
+  devopsProject: string;
+  workspace: string;
+  cluster: string;
+  project: string;
+  operator: string;
+  issues: string[];
+  lastTokenCheckAt?: string;
+}
+
+export type ReleaseApiError =
+  | { code: "TOKEN_MISSING"; message: string }
+  | { code: "TOKEN_EXPIRED"; message: string }
+  | { code: "NETWORK_ERROR"; message: string; detail?: string }
+  | { code: "API_ERROR"; message: string; status: number; detail?: unknown }
+  | { code: "PIPELINE_NOT_FOUND"; message: string }
+  | { code: "PIPELINE_CONFLICT"; message: string; pipeline: string }
+  | { code: "DEPLOY_FAILED"; message: string; pipeline: string }
+  | { code: "TRAFFIC_SHIFT_FAILED"; message: string; pipeline: string }
+  | { code: "WEIGHT_INVALID"; message: string; detail: { sum: number; weights: Record<string, number> } }
+  | { code: "AUDIT_UPLOAD_FAILED"; message: string; pipeline: string }
+  | { code: "BATCH_CANCELLED"; message: string; completedCount: number; cancelledCount: number };

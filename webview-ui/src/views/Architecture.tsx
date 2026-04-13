@@ -72,7 +72,7 @@ export function Architecture() {
   }
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto lg:flex-row">
       <div className="min-w-0 flex-1 space-y-3">
         <Card title="模块依赖拓扑" subtitle="节点大小≈代码量，边粗细≈引用次数">
           <GraphControls

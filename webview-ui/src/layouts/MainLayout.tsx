@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   Moon,
   Network,
+  Rocket,
   Sun,
   TestTube2,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { ConnectionStatus, LoadingSkeleton } from "@/components/common";
 import { ProjectSwitcher } from "@/components/common/ProjectSwitcher";
 import { useThemeSync } from "@/hooks/use-theme-sync";
+import { useWebviewClipboard } from "@/hooks/use-webview-clipboard";
 import { useObservatoryStore } from "@/store/observatory-store";
 import { useThemeStore } from "@/store/theme-store";
 
@@ -29,15 +31,17 @@ const nav = [
   { to: "/ai-sessions", label: "AI 日志", icon: Bot },
   { to: "/sessions", label: "会话", icon: FolderOpen },
   { to: "/docs-health", label: "文档", icon: FileCheck },
+  { to: "/release", label: "发布", icon: Rocket },
 ] as const;
 
 export function MainLayout() {
   useThemeSync();
+  useWebviewClipboard();
   const { theme, toggleTheme } = useThemeStore();
   const wsStatus = useObservatoryStore((s) => s.wsStatus);
 
   return (
-    <div className="flex min-h-screen bg-zinc-50 text-zinc-900 dark:bg-[#1e1e2e] dark:text-zinc-200">
+    <div className="flex h-full min-h-0 overflow-hidden bg-zinc-50 text-zinc-900 dark:bg-[#1e1e2e] dark:text-zinc-200">
       <aside className="flex w-52 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-700 dark:bg-[#252536]">
         <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-700">
           <div className="text-sm font-semibold tracking-tight">Observatory</div>
@@ -67,11 +71,11 @@ export function MainLayout() {
         </nav>
         <div className="border-t border-zinc-200 p-2 text-xs text-zinc-500 dark:border-zinc-700">
           <ConnectionStatus status={wsStatus} className="mb-1" />
-          <div>v0.1.0</div>
+          <div>v0.1.1</div>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 bg-white/80 px-4 py-3 backdrop-blur dark:border-zinc-700 dark:bg-[#252536]/80">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-4">
             <h1 className="shrink-0 text-lg font-medium">Dashboard</h1>
@@ -91,12 +95,14 @@ export function MainLayout() {
             {theme === "dark" ? "亮色" : "暗色"}
           </button>
         </header>
-        <main className="min-h-0 flex-1 overflow-auto p-6">
-          <Suspense
-            fallback={<LoadingSkeleton variant="card" lines={8} />}
-          >
-            <Outlet />
-          </Suspense>
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-6">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <Suspense
+              fallback={<LoadingSkeleton variant="card" lines={8} />}
+            >
+              <Outlet />
+            </Suspense>
+          </div>
         </main>
       </div>
     </div>

@@ -5,37 +5,25 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import {
+  getDeployCheetahMcp,
+  getUtTestAutoIngest,
+} from "../observatory/observatory-config";
 import { ObservatoryStore } from "../observatory/store";
 import { LocalServer } from "../server/local-server";
 import { SddTestReportWatcher } from "../watchers/sdd-test-report-watcher";
 import { TerminalWatcher } from "../watchers/terminal-watcher";
-
-function readAutoIngestTestReportEnabled(): boolean {
-  const cfg = vscode.workspace.getConfiguration("observatory");
-  const insNew = cfg.inspect<boolean>("test.autoIngestTestReport");
-  if (
-    insNew?.globalValue !== undefined ||
-    insNew?.workspaceValue !== undefined ||
-    insNew?.workspaceFolderValue !== undefined
-  ) {
-    return cfg.get<boolean>("test.autoIngestTestReport", true);
-  }
-  const insOld = cfg.inspect<boolean>("test.autoIngestPytestReport");
-  if (
-    insOld?.globalValue !== undefined ||
-    insOld?.workspaceValue !== undefined ||
-    insOld?.workspaceFolderValue !== undefined
-  ) {
-    return cfg.get<boolean>("test.autoIngestPytestReport", true);
-  }
-  return cfg.get<boolean>("test.autoIngestTestReport", true);
-}
+import type { ReleaseHandler } from "../release/release-handler";
 import type { RunFullScanSddSummary } from "../scanners/sdd/types";
 import { FolderSession } from "./folder-session";
 import {
   ObservatoryStateMachine,
   type ObservatoryRunState,
 } from "./observatory-state-machine";
+
+function readAutoIngestTestReportEnabled(): boolean {
+  return getUtTestAutoIngest(vscode.workspace.getConfiguration("observatory"));
+}
 
 export class ObservatoryRegistry implements vscode.Disposable {
   private readonly folders = new Map<string, FolderSession>();
@@ -44,10 +32,20 @@ export class ObservatoryRegistry implements vscode.Disposable {
   private disposed = false;
   private readonly state = new ObservatoryStateMachine();
 
+  private _releaseHandler?: ReleaseHandler;
+
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly output: vscode.OutputChannel
   ) {}
+
+  setReleaseHandler(handler: ReleaseHandler): void {
+    this._releaseHandler = handler;
+  }
+
+  get releaseHandler(): ReleaseHandler | undefined {
+    return this._releaseHandler;
+  }
 
   setTreeRefresh(fn: () => void): void {
     this.treeRefresh = fn;
@@ -99,9 +97,10 @@ export class ObservatoryRegistry implements vscode.Disposable {
         const cfg = vscode.workspace.getConfiguration("observatory", uri);
         return {
           defaultServiceList: cfg.get<string>("deploy.defaultServiceList", "") ?? "",
-          cheetahMcpService: cfg.get<string>("mcp.cheetah", "") ?? "",
+          cheetahMcpService: getDeployCheetahMcp(cfg),
         };
-      }
+      },
+      this._releaseHandler,
     );
     await this.server.start();
     this.output.appendLine(

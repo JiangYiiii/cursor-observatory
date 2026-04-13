@@ -77,7 +77,7 @@ export function Overview() {
   const attention = buildAttentionItems({ capabilities, docsHealth });
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
       <div>
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
           {proj?.name ?? "未命名项目"}

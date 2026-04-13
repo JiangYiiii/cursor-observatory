@@ -65,29 +65,87 @@ export class ObservatoryStore {
     return this.basePath;
   }
 
+  /** User-local paths under `.observatory/` (project-shared JSON may be committed). */
+  private static readonly USER_LOCAL_GITIGNORE_PATTERNS: readonly string[] = [
+    ".observatory/manifest.json",
+    ".observatory/ai-sessions.json",
+    ".observatory/sessions/",
+    ".observatory/progress.json",
+    ".observatory/report.json",
+    ".observatory/test-results.json",
+    ".observatory/test-history.jsonl",
+    ".observatory/pytest-report.json",
+    ".observatory/*.corrupted",
+  ];
+
+  private static readonly LEGACY_FULL_DIR_IGNORE = new Set([
+    ".observatory/",
+    "**/.observatory/",
+  ]);
+
   async initialize(): Promise<void> {
     await fs.mkdir(this.basePath, { recursive: true });
     await fs.mkdir(path.join(this.basePath, "sessions"), { recursive: true });
     await this.ensureGitignore();
   }
 
-  /** Append `.observatory/` to project `.gitignore` if missing. */
+  /**
+   * Append user-local `.observatory/*` patterns to `.gitignore`.
+   * Removes legacy whole-directory ignores (`.observatory/` and the double-glob form) so shared files can be tracked.
+   */
   async ensureGitignore(): Promise<void> {
     const gitignorePath = path.join(this.workspaceRoot, ".gitignore");
+    const headerLegacy = "# Observatory (auto)";
+    const headerUserLocal = "# Observatory – user-local (auto)";
     try {
-      let content = "";
+      let raw = "";
       try {
-        content = await fs.readFile(gitignorePath, "utf8");
+        raw = await fs.readFile(gitignorePath, "utf8");
       } catch {
-        content = "";
+        raw = "";
       }
-      const lines = content.split("\n").map((l) => l.trim());
-      const toAdd: string[] = [];
-      if (!lines.includes(".observatory/")) toAdd.push(".observatory/");
-      if (!lines.includes("**/.observatory/")) toAdd.push("**/.observatory/");
-      if (toAdd.length === 0) return;
-      const block = `\n# Observatory (auto)\n${toAdd.join("\n")}\n`;
-      await fs.appendFile(gitignorePath, content.endsWith("\n") ? block : `\n${block}`, "utf8");
+      const lines = raw.split(/\r?\n/);
+      const kept: string[] = [];
+      for (const line of lines) {
+        const t = line.trim();
+        if (ObservatoryStore.LEGACY_FULL_DIR_IGNORE.has(t)) continue;
+        if (t === headerLegacy || t === headerUserLocal) continue;
+        kept.push(line);
+      }
+      const existing = new Set(
+        kept.map((l) => l.trim()).filter((l) => l.length > 0)
+      );
+      const missing = ObservatoryStore.USER_LOCAL_GITIGNORE_PATTERNS.filter(
+        (p) => !existing.has(p)
+      );
+      if (missing.length === 0) {
+        const newContent = kept.join("\n");
+        if (newContent !== raw) {
+          await fs.writeFile(
+            gitignorePath,
+            newContent.endsWith("\n") || newContent.length === 0
+              ? newContent
+              : `${newContent}\n`,
+            "utf8"
+          );
+        }
+        return;
+      }
+      while (kept.length > 0 && kept[kept.length - 1] === "") {
+        kept.pop();
+      }
+      const blockLines = [
+        "",
+        headerUserLocal,
+        ...missing,
+        "",
+      ];
+      const appended = `${kept.join("\n")}${kept.length ? "\n" : ""}${blockLines.join("\n")}`;
+      await fs.writeFile(
+        gitignorePath,
+        appended.endsWith("\n") ? appended : `${appended}\n`,
+        "utf8"
+      );
     } catch {
       /* ignore — e.g. read-only FS */
     }

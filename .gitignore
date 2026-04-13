@@ -7,14 +7,22 @@ dist/
 .DS_Store
 .env
 .env.*
+# Open VSX / 本地发布 token（勿提交）
+cursor-observatory-token.txt
+.cicd-cookie
 extension/dist/
 webview-ui/dist/
 
-# Observatory (auto)
-.observatory/
-
-# Observatory (auto)
-**/.observatory/
+# Observatory – user-local (auto): 仅忽略本机/个人产物；项目共用 JSON（如 architecture、capabilities）可提交
+.observatory/manifest.json
+.observatory/ai-sessions.json
+.observatory/sessions/
+.observatory/progress.json
+.observatory/report.json
+.observatory/test-results.json
+.observatory/test-history.jsonl
+.observatory/pytest-report.json
+.observatory/*.corrupted
 
 # SDD 每特性本地 Observatory 产物（测试报告等，仅本机）
 specs/**/observatory/

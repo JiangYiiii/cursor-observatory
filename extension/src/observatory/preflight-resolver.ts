@@ -4,11 +4,18 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { getCurrentGitState } from "./git-utils";
 import {
   type McpStatusEntry,
   resolveMcpStatusFromStrings,
 } from "./mcp-preflight";
+import {
+  getCodeSubmitSkill,
+  getDeployMcpService,
+  getDeployMcpTool,
+  getSddArtifactsAnalyzeSkill,
+  getTestCasesMcpService,
+  getTestCasesMcpTool,
+} from "./observatory-config";
 
 export { resolveMcpStatusFromStrings } from "./mcp-preflight";
 
@@ -79,19 +86,22 @@ export async function resolveMcpStatus(
   const cfg = readObservatoryConfig();
   if (stage === "cicd") {
     return resolveMcpStatusFromStrings(
-      cfg.get<string>("mcp.cicd"),
-      cfg.get<string>("mcp.cicdTool") ?? "swimlane_deploy"
+      getDeployMcpService(cfg),
+      getDeployMcpTool(cfg)
     );
   }
   return resolveMcpStatusFromStrings(
-    cfg.get<string>("mcp.testRunner"),
-    cfg.get<string>("mcp.testRunnerTool") ?? "run_test_case"
+    getTestCasesMcpService(cfg),
+    getTestCasesMcpTool(cfg)
   );
 }
 
-/** 影响分析 / 测试用例 JSON 与当前 Git 状态比对 */
+/**
+ * 影响分析 / 测试用例 JSON 新鲜度（与 webview `impact-freshness` 对齐）：
+ * 有完整快照即视为 fresh，不再与当前 Git 比对指纹。
+ */
 export async function resolveImpactOrTestFreshness(
-  workspaceRoot: string,
+  _workspaceRoot: string,
   snapshot: {
     workspace_branch?: string;
     head_commit?: string;
@@ -112,15 +122,7 @@ export async function resolveImpactOrTestFreshness(
   ) {
     return "invalid";
   }
-  const cur = await getCurrentGitState(workspaceRoot);
-  if (
-    b === cur.branch &&
-    h === cur.headCommit &&
-    f === cur.fingerprint
-  ) {
-    return "fresh";
-  }
-  return "stale";
+  return "fresh";
 }
 
 /**
@@ -138,7 +140,7 @@ export async function runPreflight(
     const r = await resolveSkillStatus(
       workspaceRoot,
       "analyze",
-      cfg.get<string>("skill.analyze")
+      getSddArtifactsAnalyzeSkill(cfg)
     );
     const entry: SkillStatusEntry = { status: r.status, path: r.path };
     skillStatus.analyze = entry;
@@ -153,7 +155,7 @@ export async function runPreflight(
     let r = await resolveSkillStatus(
       workspaceRoot,
       "code-submit",
-      cfg.get<string>("skill.codeSubmit")
+      getCodeSubmitSkill(cfg)
     );
     if (r.status === "missing") {
       r = await resolveSkillStatus(workspaceRoot, "repay-code-submit");

@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import type { PreflightResult } from "@/types/observatory";
 
 type Props = {
@@ -15,7 +14,6 @@ type Props = {
   onBlurSaveDeployServices: () => Promise<void>;
   /** 来自设置 observatory.deploy.defaultServiceList，只读提示 */
   extensionDefaultServices: string;
-  impactFreshness: "fresh" | "stale" | "missing" | "invalid";
   preflight: PreflightResult | null;
   onDeployPrompt: () => void;
 };
@@ -31,7 +29,6 @@ export function DeployCard({
   onDeployServicesDraftChange,
   onBlurSaveDeployServices,
   extensionDefaultServices,
-  impactFreshness,
   preflight,
   onDeployPrompt,
 }: Props) {
@@ -41,14 +38,6 @@ export function DeployCard({
   /** 合并后无任何服务（影响分析无应用 + 未填手工 + 无扩展默认） */
   const noMergedServices =
     !affectedServicesLine.trim() || affectedServicesLine === "—";
-  const [confirmed, setConfirmed] = useState(false);
-
-  useEffect(() => {
-    setConfirmed(false);
-  }, [impactFreshness, branch, affectedServicesLine]);
-
-  const needConfirm = impactFreshness !== "fresh";
-  const canDeploy = !needConfirm || confirmed;
 
   return (
     <section className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-600">
@@ -58,9 +47,8 @@ export function DeployCard({
         </h3>
         <button
           type="button"
-          disabled={!canDeploy}
           onClick={onDeployPrompt}
-          className="rounded-md bg-cyan-700 px-2 py-1 text-[10px] font-medium text-white hover:bg-cyan-800 disabled:opacity-50"
+          className="rounded-md bg-cyan-700 px-2 py-1 text-[10px] font-medium text-white hover:bg-cyan-800"
         >
           部署泳道
         </button>
@@ -133,21 +121,6 @@ export function DeployCard({
             : `未就绪 · ${cicd?.status ?? "unknown"}`}
         </div>
       </div>
-      {needConfirm ? (
-        <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-2 text-[10px] text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-          <p className="mb-1">
-            影响分析非最新：部署前请确认服务列表仍正确。
-          </p>
-          <label className="inline-flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
-            />
-            我已确认服务列表
-          </label>
-        </div>
-      ) : null}
     </section>
   );
 }

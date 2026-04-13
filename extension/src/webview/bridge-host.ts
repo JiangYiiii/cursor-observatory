@@ -7,14 +7,16 @@ import {
   handleObservatoryBridgeMessage,
   type GetObservatoryStore,
 } from "../bridge/observatory-request-handler";
+import type { ReleaseHandler } from "../release/release-handler";
 
 export function attachObservatoryWebviewBridge(
   webview: vscode.Webview,
-  getStore: GetObservatoryStore
+  getStore: GetObservatoryStore,
+  releaseHandler?: ReleaseHandler,
 ): vscode.Disposable {
   return webview.onDidReceiveMessage((msg: unknown) => {
     void (async () => {
-      const reply = await handleObservatoryBridgeMessage(msg, getStore);
+      const reply = await handleObservatoryBridgeMessage(msg, getStore, releaseHandler);
       if (reply) {
         await webview.postMessage(reply);
       }

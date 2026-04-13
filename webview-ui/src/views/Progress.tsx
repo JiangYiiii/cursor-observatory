@@ -80,7 +80,7 @@ export function Progress() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
       {summary ? (
         <div className="grid gap-3 sm:grid-cols-3">
           {summary.total_commits != null ? (

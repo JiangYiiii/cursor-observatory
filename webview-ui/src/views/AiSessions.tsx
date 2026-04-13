@@ -71,44 +71,46 @@ export function AiSessions() {
   }
 
   return (
-    <Card title="AI 会话日志" subtitle="按时间倒序；可筛选关联能力">
-      <div className="mb-4">
-        <CapabilityFilter
-          capabilities={capabilities}
-          value={capFilter}
-          onChange={setCapFilter}
-        />
-      </div>
-
-      {filtered.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          没有符合当前能力筛选的会话。
-        </p>
-      ) : (
-        <>
-          <PaginationControls
-            className="mb-3"
-            page={page}
-            pageSize={pageSize}
-            total={filtered.length}
-            onPageChange={setPage}
-            onPageSizeChange={(n) => {
-              setPageSize(n);
-              setPage(1);
-            }}
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <Card title="AI 会话日志" subtitle="按时间倒序；可筛选关联能力">
+        <div className="mb-4">
+          <CapabilityFilter
+            capabilities={capabilities}
+            value={capFilter}
+            onChange={setCapFilter}
           />
-          <ActivityTimeline>
-            {pagedSessions.map((s, i) => (
-              <TimelineItem
-                key={s.id}
-                isLast={i === pagedSessions.length - 1}
-              >
-                <SessionEvent session={s} />
-              </TimelineItem>
-            ))}
-          </ActivityTimeline>
-        </>
-      )}
-    </Card>
+        </div>
+
+        {filtered.length === 0 ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            没有符合当前能力筛选的会话。
+          </p>
+        ) : (
+          <>
+            <PaginationControls
+              className="mb-3"
+              page={page}
+              pageSize={pageSize}
+              total={filtered.length}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                setPage(1);
+              }}
+            />
+            <ActivityTimeline>
+              {pagedSessions.map((s, i) => (
+                <TimelineItem
+                  key={s.id}
+                  isLast={i === pagedSessions.length - 1}
+                >
+                  <SessionEvent session={s} />
+                </TimelineItem>
+              ))}
+            </ActivityTimeline>
+          </>
+        )}
+      </Card>
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import fg from "fast-glob";
 import type { DocsHealth } from "../observatory/types";
+import { resolveAiDocIndexAbsPath } from "../observatory/docs-config";
 import { OBSERVATORY_WORKSPACE_SCAN_IGNORE } from "./scan-ignores";
 
 /** 参与覆盖率统计的源码（与 Python 无关；含 TS/JS/Java 等常见扩展名） */
@@ -58,10 +59,7 @@ export class DocScanner {
     const total = counted.length || 1;
     const scoreDoc = Math.round((annotated / total) * 100);
 
-    const indexPath = path.join(
-      workspaceRoot,
-      "docs/00-meta/ai-doc-index.json"
-    );
+    const indexPath = resolveAiDocIndexAbsPath(workspaceRoot);
     let indexScore = 100;
     let orphan: string[] = [];
     try {

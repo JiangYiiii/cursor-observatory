@@ -3,6 +3,7 @@
  */
 import * as vscode from "vscode";
 import { applyCompletedFromTestResults } from "../capability/capability-lifecycle";
+import { getSddTestingCompleteOnTestPass } from "../observatory/observatory-config";
 import type { ObservatoryStore } from "../observatory/store";
 import type { TestHistoryLineV1, TestMapping, TestResults } from "../observatory/types";
 import { aggregateByCapabilityFromTestCases } from "./aggregate-by-capability";
@@ -44,30 +45,6 @@ function historyLineFromTestResults(
   };
 }
 
-function getSddTestingCompleteOnTestsPass(
-  cfg: vscode.WorkspaceConfiguration
-): boolean {
-  const insNew = cfg.inspect<boolean>("capability.sddTestingCompleteOnTestPass");
-  if (
-    insNew?.globalValue !== undefined ||
-    insNew?.workspaceValue !== undefined ||
-    insNew?.workspaceFolderValue !== undefined
-  ) {
-    return cfg.get<boolean>("capability.sddTestingCompleteOnTestPass", true);
-  }
-  const insOld = cfg.inspect<boolean>(
-    "capability.sddTestingCompleteOnPytestPass"
-  );
-  if (
-    insOld?.globalValue !== undefined ||
-    insOld?.workspaceValue !== undefined ||
-    insOld?.workspaceFolderValue !== undefined
-  ) {
-    return cfg.get<boolean>("capability.sddTestingCompleteOnPytestPass", true);
-  }
-  return cfg.get<boolean>("capability.sddTestingCompleteOnTestPass", true);
-}
-
 /** 已符合 Observatory 的规范化测试结果 JSON（扩展写入的 report.json 同形）。 */
 export function isNormalizedObservatoryTestResultsJson(text: string): boolean {
   try {
@@ -101,7 +78,7 @@ async function persistIngestResult(
 
   const cfg = vscode.workspace.getConfiguration("observatory");
   const autoComplete = cfg.get<boolean>("capability.autoCompleteOnTestsPass", true);
-  const sddToCompleted = getSddTestingCompleteOnTestsPass(cfg);
+  const sddToCompleted = getSddTestingCompleteOnTestPass(cfg);
   if (autoComplete) {
     await applyCompletedFromTestResults(store, testResults, {
       allowSddCompleted: sddToCompleted,

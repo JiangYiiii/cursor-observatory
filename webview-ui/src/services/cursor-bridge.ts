@@ -5,18 +5,36 @@
 import type {
   AiSession,
   Architecture,
+  BatchDeployRequest,
+  BatchOperationItemResult,
+  BatchTrafficShiftRequest,
+  CanaryDeployment,
+  CanarySwitchPreCheck,
   Capability,
   DataModels,
+  DocsAiIndicesPayload,
+  DocsCatalogDocument,
+  DocsConfigPayload,
+  DocsFilePayload,
   DocsHealth,
+  DocsTreePayload,
+  ImageTag,
   Manifest,
+  PipelineInfo,
+  PipelineNode,
+  PipelineRunSummary,
+  PipelineStageSummary,
   PreflightResult,
   Progress,
+  ReleaseDiffPayload,
+  ReleaseEnvStatus,
   SessionDetail,
   SessionIndex,
   TestExpectations,
   TestHistoryEntry,
   TestMapping,
   TestResults,
+  TrafficChangeLog,
   Unsubscribe,
   UpdateEvent,
 } from "../types/observatory";
@@ -193,6 +211,30 @@ export class CursorBridgeDataSource implements IDataSource {
     return this.request<DocsHealth | null>("getDocsHealth");
   }
 
+  async getDocsConfig(): Promise<DocsConfigPayload> {
+    return this.request<DocsConfigPayload>("docs.getConfig");
+  }
+
+  async getDocsTree(): Promise<DocsTreePayload> {
+    return this.request<DocsTreePayload>("docs.listTree");
+  }
+
+  async getDocsFile(relativePath: string): Promise<DocsFilePayload> {
+    return this.request<DocsFilePayload>("docs.readFile", { relativePath });
+  }
+
+  async getDocsCatalog(): Promise<DocsCatalogDocument | null> {
+    return this.request<DocsCatalogDocument | null>("docs.getCatalog");
+  }
+
+  async getDocsAiIndices(): Promise<DocsAiIndicesPayload> {
+    return this.request<DocsAiIndicesPayload>("docs.listAiIndices");
+  }
+
+  async openWorkspaceFile(relativePath: string): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>("workspace.openFile", { relativePath });
+  }
+
   async getSessionList(): Promise<SessionIndex | null> {
     return this.request<SessionIndex | null>("getSessionList");
   }
@@ -284,6 +326,10 @@ export class CursorBridgeDataSource implements IDataSource {
     }>("getGitInfo");
   }
 
+  async getReleaseDiff(): Promise<ReleaseDiffPayload> {
+    return this.request<ReleaseDiffPayload>("getReleaseDiff");
+  }
+
   async getImpactAnalysisMd(feature: string): Promise<string | null> {
     return this.request<string | null>("getImpactAnalysisMd", { feature });
   }
@@ -304,5 +350,113 @@ export class CursorBridgeDataSource implements IDataSource {
       defaultServiceList: string;
       cheetahMcpService: string;
     }>("getDeploySettings");
+  }
+
+  // --- Release Workflow ---
+
+  async getReleaseEnvStatus(): Promise<ReleaseEnvStatus> {
+    return this.request<ReleaseEnvStatus>("release.getEnvStatus");
+  }
+
+  async listReleasePipelines(): Promise<PipelineInfo[]> {
+    return this.request<PipelineInfo[]>("release.listPipelines");
+  }
+
+  async listReleaseStageSummaries(): Promise<PipelineStageSummary[]> {
+    return this.request<PipelineStageSummary[]>("release.listStageSummaries");
+  }
+
+  async getLatestPipelineRun(pipelineName: string): Promise<PipelineRunSummary | null> {
+    return this.request<PipelineRunSummary | null>("release.getLatestRun", { pipelineName });
+  }
+
+  async getPipelineRunNodes(runId: string): Promise<PipelineNode[]> {
+    return this.request<PipelineNode[]>("release.getRunNodes", { runId });
+  }
+
+  async listReleaseImages(repoName: string): Promise<ImageTag[]> {
+    return this.request<ImageTag[]>("release.listImages", { repoName });
+  }
+
+  async triggerReleaseDeploy(
+    pipelineName: string,
+    fullModuleName: string,
+    imageTag: string,
+    options?: { ksPipelineType?: string; includeCanaryDeployHeader?: boolean },
+  ): Promise<{ runId: string }> {
+    return this.request<{ runId: string }>("release.triggerDeploy", {
+      pipelineName,
+      fullModuleName,
+      imageTag,
+      ...options,
+    });
+  }
+
+  async batchReleaseDeploy(
+    request: BatchDeployRequest
+  ): Promise<{ operationId: string; results: BatchOperationItemResult[] }> {
+    return this.request<{ operationId: string; results: BatchOperationItemResult[] }>(
+      "release.batchDeploy",
+      request
+    );
+  }
+
+  async getReleaseCanary(pipeline: string): Promise<CanaryDeployment | null> {
+    return this.request<CanaryDeployment | null>("release.getCanary", { pipeline });
+  }
+
+  async preCheckReleaseCanarySwitch(pipeline: string): Promise<CanarySwitchPreCheck> {
+    return this.request<CanarySwitchPreCheck>("release.preCheckCanarySwitch", { pipeline });
+  }
+
+  async shiftReleaseTraffic(
+    pipeline: string,
+    weights: Record<string, number>,
+    meta?: unknown
+  ): Promise<BatchOperationItemResult> {
+    return this.request<BatchOperationItemResult>("release.shiftTraffic", { pipeline, weights, meta });
+  }
+
+  async submitReleasePipelineRunInput(
+    pipelineName: string,
+    runId: string,
+    nodeId: string,
+    stepId: string,
+    inputId: string,
+    abort: boolean,
+    jenkinsBuildId?: string
+  ): Promise<void> {
+    await this.request<unknown>("release.submitPipelineRunInput", {
+      pipelineName,
+      runId,
+      nodeId,
+      stepId,
+      inputId,
+      abort,
+      ...(jenkinsBuildId ? { jenkinsBuildId } : {}),
+    });
+  }
+
+  async batchShiftReleaseTraffic(
+    request: BatchTrafficShiftRequest
+  ): Promise<{ operationId: string; results: BatchOperationItemResult[] }> {
+    return this.request<{ operationId: string; results: BatchOperationItemResult[] }>(
+      "release.batchTrafficShift",
+      request
+    );
+  }
+
+  async getReleaseTrafficLogs(pipeline: string): Promise<TrafficChangeLog[]> {
+    return this.request<TrafficChangeLog[]>("release.getTrafficLogs", { pipeline });
+  }
+
+  async checkReleaseRollback(
+    module: string,
+    image: string
+  ): Promise<{ canRollback: boolean; reason?: string }> {
+    return this.request<{ canRollback: boolean; reason?: string }>(
+      "release.checkRollback",
+      { module, image }
+    );
   }
 }

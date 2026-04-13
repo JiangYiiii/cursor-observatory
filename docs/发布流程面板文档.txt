@@ -1,0 +1,198 @@
+增加一个服务发布的流程面板，需要用户填写相关的token到环境变量后才可使用。
+生产发布的流程是：
+1.创建feature分支，然后进行自动ci，ci完成后，将镜像发布到各个服务列表下等待cd。
+2.在cicd页面，选择要发布服务的后方的运行按钮，弹窗，默认的流水线、服务名，需要选择要发布的镜像id，由第一步获得。一般都是最新的镜像id。
+3.镜像开始启动，如果配置了发布单确认节点，需要打开上线发布单，确保所有上线代码diff都已经确认可以发布，上线单全部确认后会自动进行下一步。
+4.服务启动，可能会等待30-40分钟不等
+5.部分对客的API和service服务会进入灰度阶段，一般可以点击确认，继续进入蓝绿分流阶段。
+6.部分对客的API和service服务会进入蓝绿分流阶段，在另一个分流页面进行切流量，手动调整新老版本的切流比例，直至新流程流量到100%为止。
+7.非对客流程比如scheduler流程，会直接到这一步，分流完成后点击确认，结束分流阶段。
+8.发布完毕
+
+除了蓝绿分流是在一个单独的页面调整，其他的都是以节点的形式配置，整个是一个node链，用来将整个流程穿起来。
+但是现在无法批量发布，批量调整蓝绿分流比例，只能一个一个点击，非常不方便。
+本次要做一个发布流程面板，
+1. 支持一键批量发布，将同一个镜像批量在各个流程发布。
+2. 将要发布的所有流程当前的阶段展示出来，比如到哪一个节点了，是否需要点击，展示在面板内，这个过程不需要支持批量点击。
+3. 如果有蓝绿切流过程，需要支持选择多条流水线后批量调整分流比例，进行切流。
+
+
+
+
+获取生产流水线
+curl 'https://cicd.fintopia.tech/kapis/devops.kubesphere.io/v1alpha3/devops/cash-loanjqjjq/pipelines?page=1&limit=50&filter=prod&sortBy=name&ascending=true' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'Referer: https://cicd.fintopia.tech/cashloan/clusters/default/devops/cash-loanjqjjq/pipelines?limit=50&page=1&filter=prod' \
+  -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'content-type: application/json' \
+  -H 'sec-ch-ua-mobile: ?0'
+
+获取流水线的节点信息：
+curl 'https://cicd.fintopia.tech/kapis/devops.kubesphere.io/v1alpha3/namespaces/cash-loanjqjjq/pipelineruns/cash-loan-channel-api-cd-canary-vkmgx/nodedetails' \
+  -H 'accept: */*' \
+  -H 'accept-language: zh-CN,zh;q=0.9' \
+  -H 'content-type: application/json' \
+  -b 'rl_page_init_referrer=RudderEncrypt%3AU2FsdGVkX1%2BzAaS2cI51ki87ZcK7MY2xXr7ATh8MGM9dF%2BnzEjwpJdIm%2BLAiYZdg; rl_page_init_referring_domain=RudderEncrypt%3AU2FsdGVkX19gRlBxvGvHcuvyyTDJdxoTNjZXCWWnODK7T5crySsFgr5MU6InWfmd; YQG_EMAIL_PROD=yijiang@fintopia.tech; rl_anonymous_id=RudderEncrypt%3AU2FsdGVkX19RjHflXBN2uimMKJNxgFnq3d76SGp7a8WODy%2Fit1kbfzi6NfPzorGc4YOiMNyaOoNzXKd1DqSi4w%3D%3D; rl_user_id=RudderEncrypt%3AU2FsdGVkX1%2FCInIJ0raP0e8Y%2FcZpa5ygD%2B4tLFKn8rSp6ygBJml14mrRlMVNjD74qNXe8uX0VARozcKx7Xm7UhTVoIAOSrpIIAKkctyIEqwRjbkS%2FLQGs2PcbW%2FF8mRyqTgL0hnuSHM6uAls3gyai%2FPoLVlIeA3fZ2JQcwCgaEQ%3D; rl_trait=RudderEncrypt%3AU2FsdGVkX1%2FUopfaxVDzTXaKdDuWz%2FRYoywH2HTyO1hZ%2FNNj%2BIkINfWGo6ScRnu3pF3btXmpD9MYUoM5SntkG%2BiDaha8b3%2ByVmsE1sPWpCfAoTlLgN%2B8nFWrrDhuADupXkN6l1ezkSXRoLvyq9jvHg%3D%3D; rl_session=RudderEncrypt%3AU2FsdGVkX1%2FGdo3RrxDbN2Jmg%2BiQjaJyQguTaI2Im%2BavuZGilkGvGckIldqkZRlUl1sub9AeXYnQc%2BcB%2BA46VEpo2Wf9udyijPq7OiwJLcs8vj636987anZtfkHSJu2IdvlgAjfoVGRODAxTe4kC5A%3D%3D; ph_phc_4URIAm1uYfJO7j8kWSe0J8lc8IqnstRLS7Jx8NcakHo_posthog=%7B%22%24device_id%22%3A%22019bfd5e-fdb3-7350-8d61-24dd9cdaaf9b%22%2C%22distinct_id%22%3A%22e90c6a47a5da3696b329271961f691e0c4f52f90c9a7e25da074264060ca2bf2%2342d543ee-3e8a-47ab-803e-14dd6172271f%22%2C%22%24sesid%22%3A%5B1772270078176%2C%22019ca387-48e2-7080-b25b-4aa8348e8b33%22%2C1772270078176%5D%2C%22%24epp%22%3Atrue%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fn8n.fintopia.tech%2Fhome%2Fworkflows%22%7D%2C%22%24user_state%22%3A%22identified%22%7D; aliyungf_tc=ee07e03b594f2d55de15f521e06007c8ba00ef203337ee02c324e8cf207b6218; lang=zh; sensorsdata2015jssdkcross=%7B%22distinct_id%22%3A%2200518%22%2C%22first_id%22%3A%221974ee5f8d548c-0f338d1936b63-19525636-1484784-1974ee5f8d6352e%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%2C%22%24latest_referrer%22%3A%22%22%7D%2C%22identities%22%3A%22eyIkaWRlbnRpdHlfY29va2llX2lkIjoiMTk3NGVlNWY4ZDU0OGMtMGYzMzhkMTkzNmI2My0xOTUyNTYzNi0xNDg0Nzg0LTE5NzRlZTVmOGQ2MzUyZSIsIiRpZGVudGl0eV9sb2dpbl9pZCI6IjAwNTE4In0%3D%22%2C%22history_login_id%22%3A%7B%22name%22%3A%22%24identity_login_id%22%2C%22value%22%3A%2200518%22%7D%7D; prod_explore_session=.eJwljksKAjEQBe-StYukk066vYz0L4wwIMzoRvHuBlzWo-DVJ93mEeeWrs_jFZd0u3u6JmrKAeghXnsIZzRCYAMfPgv0acYyXalE61A8TwJ1KxRNcQgG8WylI_eBvaJnlUEeXQrUXGIYQhueo8p6Ia3gYjaUnVV0iWmFvM44_jW1whr2h8keC99b-v4ATKo1Pw.abKKxQ.OQgSKw2VXNHR063v_1m9A2IZ9AQ; YQG_UNITE_TOKEN_PROD=fc034c31-fbf7-4908-9a7e-2adbc8d82a3d-00518-01; acw_tc=0a02020617757024940072506e006b92ca581eb0f6c3f0d1d86717ffb28c2b' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://cicd.fintopia.tech/cashloan/clusters/default/devops/cash-loanjqjjq/pipelines/cash-loan-channel-api-cd-canary/run/cash-loan-channel-api-cd-canary-vkmgx/task-status' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36'
+
+  获取可以发布的流量版本：
+  curl 'https://cicd.fintopia.tech/kapis/cicd.kubesphere.io/v1alpha4/namespaces/cash-loanjqjjq/image/tags?repoName=cash-loan-api&env=prod&imageFilter=release%2A&searchFilter=' \
+  -H 'accept: */*' \
+  -H 'accept-language: zh-CN,zh;q=0.9' \
+  -H 'content-type: application/json' \
+  -b 'rl_page_init_referrer=RudderEncrypt%3AU2FsdGVkX1%2BzAaS2cI51ki87ZcK7MY2xXr7ATh8MGM9dF%2BnzEjwpJdIm%2BLAiYZdg; rl_page_init_referring_domain=RudderEncrypt%3AU2FsdGVkX19gRlBxvGvHcuvyyTDJdxoTNjZXCWWnODK7T5crySsFgr5MU6InWfmd; YQG_EMAIL_PROD=yijiang@fintopia.tech; rl_anonymous_id=RudderEncrypt%3AU2FsdGVkX19RjHflXBN2uimMKJNxgFnq3d76SGp7a8WODy%2Fit1kbfzi6NfPzorGc4YOiMNyaOoNzXKd1DqSi4w%3D%3D; rl_user_id=RudderEncrypt%3AU2FsdGVkX1%2FCInIJ0raP0e8Y%2FcZpa5ygD%2B4tLFKn8rSp6ygBJml14mrRlMVNjD74qNXe8uX0VARozcKx7Xm7UhTVoIAOSrpIIAKkctyIEqwRjbkS%2FLQGs2PcbW%2FF8mRyqTgL0hnuSHM6uAls3gyai%2FPoLVlIeA3fZ2JQcwCgaEQ%3D; rl_trait=RudderEncrypt%3AU2FsdGVkX1%2FUopfaxVDzTXaKdDuWz%2FRYoywH2HTyO1hZ%2FNNj%2BIkINfWGo6ScRnu3pF3btXmpD9MYUoM5SntkG%2BiDaha8b3%2ByVmsE1sPWpCfAoTlLgN%2B8nFWrrDhuADupXkN6l1ezkSXRoLvyq9jvHg%3D%3D; rl_session=RudderEncrypt%3AU2FsdGVkX1%2FGdo3RrxDbN2Jmg%2BiQjaJyQguTaI2Im%2BavuZGilkGvGckIldqkZRlUl1sub9AeXYnQc%2BcB%2BA46VEpo2Wf9udyijPq7OiwJLcs8vj636987anZtfkHSJu2IdvlgAjfoVGRODAxTe4kC5A%3D%3D; ph_phc_4URIAm1uYfJO7j8kWSe0J8lc8IqnstRLS7Jx8NcakHo_posthog=%7B%22%24device_id%22%3A%22019bfd5e-fdb3-7350-8d61-24dd9cdaaf9b%22%2C%22distinct_id%22%3A%22e90c6a47a5da3696b329271961f691e0c4f52f90c9a7e25da074264060ca2bf2%2342d543ee-3e8a-47ab-803e-14dd6172271f%22%2C%22%24sesid%22%3A%5B1772270078176%2C%22019ca387-48e2-7080-b25b-4aa8348e8b33%22%2C1772270078176%5D%2C%22%24epp%22%3Atrue%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fn8n.fintopia.tech%2Fhome%2Fworkflows%22%7D%2C%22%24user_state%22%3A%22identified%22%7D; aliyungf_tc=ee07e03b594f2d55de15f521e06007c8ba00ef203337ee02c324e8cf207b6218; lang=zh; sensorsdata2015jssdkcross=%7B%22distinct_id%22%3A%2200518%22%2C%22first_id%22%3A%221974ee5f8d548c-0f338d1936b63-19525636-1484784-1974ee5f8d6352e%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%2C%22%24latest_referrer%22%3A%22%22%7D%2C%22identities%22%3A%22eyIkaWRlbnRpdHlfY29va2llX2lkIjoiMTk3NGVlNWY4ZDU0OGMtMGYzMzhkMTkzNmI2My0xOTUyNTYzNi0xNDg0Nzg0LTE5NzRlZTVmOGQ2MzUyZSIsIiRpZGVudGl0eV9sb2dpbl9pZCI6IjAwNTE4In0%3D%22%2C%22history_login_id%22%3A%7B%22name%22%3A%22%24identity_login_id%22%2C%22value%22%3A%2200518%22%7D%7D; prod_explore_session=.eJwljksKAjEQBe-StYukk066vYz0L4wwIMzoRvHuBlzWo-DVJ93mEeeWrs_jFZd0u3u6JmrKAeghXnsIZzRCYAMfPgv0acYyXalE61A8TwJ1KxRNcQgG8WylI_eBvaJnlUEeXQrUXGIYQhueo8p6Ia3gYjaUnVV0iWmFvM44_jW1whr2h8keC99b-v4ATKo1Pw.abKKxQ.OQgSKw2VXNHR063v_1m9A2IZ9AQ; YQG_UNITE_TOKEN_PROD=fc034c31-fbf7-4908-9a7e-2adbc8d82a3d-00518-01; acw_tc=0a02020617757024940072506e006b92ca581eb0f6c3f0d1d86717ffb28c2b' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://cicd.fintopia.tech/cashloan/clusters/default/devops/cash-loanjqjjq/pipelines' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36'
+
+
+  查询版本信息：
+  curl 'https://aone-extra.fintopia.tech/api/v1/releaseOrder/queryByParams' \
+  -H 'accept: */*' \
+  -H 'accept-language: zh-CN,zh;q=0.9' \
+  -H 'content-type: application/json' \
+  -H 'origin: https://cicd.fintopia.tech' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://cicd.fintopia.tech/' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-site' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36' \
+  --data-raw '{"project":"cash-loan","module":"cn-cashloan-cash-loan-funding-scheduler","env":"prod","image":"release-20260408-10-1f0fa582-20260408180337","detail":false}'
+
+
+  确认cd发布：
+  curl 'https://cicd.fintopia.tech/kapis/devops.kubesphere.io/v1alpha3/namespaces/cash-loanjqjjq/pipelines/cn-cashloan-cash-loan-funding-scheduler-cd-prod/pipelineruns' \
+  -H 'accept: */*' \
+  -H 'accept-language: zh-CN,zh;q=0.9' \
+  -H 'content-type: application/json' \
+  -b 'rl_page_init_referrer=RudderEncrypt%3AU2FsdGVkX1%2BzAaS2cI51ki87ZcK7MY2xXr7ATh8MGM9dF%2BnzEjwpJdIm%2BLAiYZdg; rl_page_init_referring_domain=RudderEncrypt%3AU2FsdGVkX19gRlBxvGvHcuvyyTDJdxoTNjZXCWWnODK7T5crySsFgr5MU6InWfmd; YQG_EMAIL_PROD=yijiang@fintopia.tech; rl_anonymous_id=RudderEncrypt%3AU2FsdGVkX19RjHflXBN2uimMKJNxgFnq3d76SGp7a8WODy%2Fit1kbfzi6NfPzorGc4YOiMNyaOoNzXKd1DqSi4w%3D%3D; rl_user_id=RudderEncrypt%3AU2FsdGVkX1%2FCInIJ0raP0e8Y%2FcZpa5ygD%2B4tLFKn8rSp6ygBJml14mrRlMVNjD74qNXe8uX0VARozcKx7Xm7UhTVoIAOSrpIIAKkctyIEqwRjbkS%2FLQGs2PcbW%2FF8mRyqTgL0hnuSHM6uAls3gyai%2FPoLVlIeA3fZ2JQcwCgaEQ%3D; rl_trait=RudderEncrypt%3AU2FsdGVkX1%2FUopfaxVDzTXaKdDuWz%2FRYoywH2HTyO1hZ%2FNNj%2BIkINfWGo6ScRnu3pF3btXmpD9MYUoM5SntkG%2BiDaha8b3%2ByVmsE1sPWpCfAoTlLgN%2B8nFWrrDhuADupXkN6l1ezkSXRoLvyq9jvHg%3D%3D; rl_session=RudderEncrypt%3AU2FsdGVkX1%2FGdo3RrxDbN2Jmg%2BiQjaJyQguTaI2Im%2BavuZGilkGvGckIldqkZRlUl1sub9AeXYnQc%2BcB%2BA46VEpo2Wf9udyijPq7OiwJLcs8vj636987anZtfkHSJu2IdvlgAjfoVGRODAxTe4kC5A%3D%3D; ph_phc_4URIAm1uYfJO7j8kWSe0J8lc8IqnstRLS7Jx8NcakHo_posthog=%7B%22%24device_id%22%3A%22019bfd5e-fdb3-7350-8d61-24dd9cdaaf9b%22%2C%22distinct_id%22%3A%22e90c6a47a5da3696b329271961f691e0c4f52f90c9a7e25da074264060ca2bf2%2342d543ee-3e8a-47ab-803e-14dd6172271f%22%2C%22%24sesid%22%3A%5B1772270078176%2C%22019ca387-48e2-7080-b25b-4aa8348e8b33%22%2C1772270078176%5D%2C%22%24epp%22%3Atrue%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fn8n.fintopia.tech%2Fhome%2Fworkflows%22%7D%2C%22%24user_state%22%3A%22identified%22%7D; aliyungf_tc=ee07e03b594f2d55de15f521e06007c8ba00ef203337ee02c324e8cf207b6218; lang=zh; sensorsdata2015jssdkcross=%7B%22distinct_id%22%3A%2200518%22%2C%22first_id%22%3A%221974ee5f8d548c-0f338d1936b63-19525636-1484784-1974ee5f8d6352e%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%2C%22%24latest_referrer%22%3A%22%22%7D%2C%22identities%22%3A%22eyIkaWRlbnRpdHlfY29va2llX2lkIjoiMTk3NGVlNWY4ZDU0OGMtMGYzMzhkMTkzNmI2My0xOTUyNTYzNi0xNDg0Nzg0LTE5NzRlZTVmOGQ2MzUyZSIsIiRpZGVudGl0eV9sb2dpbl9pZCI6IjAwNTE4In0%3D%22%2C%22history_login_id%22%3A%7B%22name%22%3A%22%24identity_login_id%22%2C%22value%22%3A%2200518%22%7D%7D; prod_explore_session=.eJwljksKAjEQBe-StYukk066vYz0L4wwIMzoRvHuBlzWo-DVJ93mEeeWrs_jFZd0u3u6JmrKAeghXnsIZzRCYAMfPgv0acYyXalE61A8TwJ1KxRNcQgG8WylI_eBvaJnlUEeXQrUXGIYQhueo8p6Ia3gYjaUnVV0iWmFvM44_jW1whr2h8keC99b-v4ATKo1Pw.abKKxQ.OQgSKw2VXNHR063v_1m9A2IZ9AQ; YQG_UNITE_TOKEN_PROD=fc034c31-fbf7-4908-9a7e-2adbc8d82a3d-00518-01; acw_tc=0a02020617757024940072506e006b92ca581eb0f6c3f0d1d86717ffb28c2b' \
+  -H 'origin: https://cicd.fintopia.tech' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://cicd.fintopia.tech/cashloan/clusters/default/devops/cash-loanjqjjq/pipelines/cn-cashloan-cash-loan-funding-scheduler-cd-prod/activity' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36' \
+  --data-raw '{"parameters":[{"name":"PROJECT_NAME","value":"cash-loan"},{"name":"MODULE_NAME","value":"cn-cashloan-cash-loan-funding-scheduler"},{"name":"BUILD_ENV","value":"prod"},{"name":"IMAGE_TAG","value":"release-20260408-10-1f0fa582-20260408180337"}],"summary":""}'
+
+  切流请求：curl 'https://cicd.fintopia.tech/kapis/cicd.kubesphere.io/v1alpha4/workspaces/cashloan/canary-deploy/updateForCanaryWeight' \
+  -H 'accept: */*' \
+  -H 'accept-language: zh-CN,zh;q=0.9' \
+  -H 'content-type: application/json' \
+  -b 'rl_page_init_referrer=RudderEncrypt%3AU2FsdGVkX1%2BzAaS2cI51ki87ZcK7MY2xXr7ATh8MGM9dF%2BnzEjwpJdIm%2BLAiYZdg; rl_page_init_referring_domain=RudderEncrypt%3AU2FsdGVkX19gRlBxvGvHcuvyyTDJdxoTNjZXCWWnODK7T5crySsFgr5MU6InWfmd; YQG_EMAIL_PROD=yijiang@fintopia.tech; rl_anonymous_id=RudderEncrypt%3AU2FsdGVkX19RjHflXBN2uimMKJNxgFnq3d76SGp7a8WODy%2Fit1kbfzi6NfPzorGc4YOiMNyaOoNzXKd1DqSi4w%3D%3D; rl_user_id=RudderEncrypt%3AU2FsdGVkX1%2FCInIJ0raP0e8Y%2FcZpa5ygD%2B4tLFKn8rSp6ygBJml14mrRlMVNjD74qNXe8uX0VARozcKx7Xm7UhTVoIAOSrpIIAKkctyIEqwRjbkS%2FLQGs2PcbW%2FF8mRyqTgL0hnuSHM6uAls3gyai%2FPoLVlIeA3fZ2JQcwCgaEQ%3D; rl_trait=RudderEncrypt%3AU2FsdGVkX1%2FUopfaxVDzTXaKdDuWz%2FRYoywH2HTyO1hZ%2FNNj%2BIkINfWGo6ScRnu3pF3btXmpD9MYUoM5SntkG%2BiDaha8b3%2ByVmsE1sPWpCfAoTlLgN%2B8nFWrrDhuADupXkN6l1ezkSXRoLvyq9jvHg%3D%3D; rl_session=RudderEncrypt%3AU2FsdGVkX1%2FGdo3RrxDbN2Jmg%2BiQjaJyQguTaI2Im%2BavuZGilkGvGckIldqkZRlUl1sub9AeXYnQc%2BcB%2BA46VEpo2Wf9udyijPq7OiwJLcs8vj636987anZtfkHSJu2IdvlgAjfoVGRODAxTe4kC5A%3D%3D; ph_phc_4URIAm1uYfJO7j8kWSe0J8lc8IqnstRLS7Jx8NcakHo_posthog=%7B%22%24device_id%22%3A%22019bfd5e-fdb3-7350-8d61-24dd9cdaaf9b%22%2C%22distinct_id%22%3A%22e90c6a47a5da3696b329271961f691e0c4f52f90c9a7e25da074264060ca2bf2%2342d543ee-3e8a-47ab-803e-14dd6172271f%22%2C%22%24sesid%22%3A%5B1772270078176%2C%22019ca387-48e2-7080-b25b-4aa8348e8b33%22%2C1772270078176%5D%2C%22%24epp%22%3Atrue%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fn8n.fintopia.tech%2Fhome%2Fworkflows%22%7D%2C%22%24user_state%22%3A%22identified%22%7D; aliyungf_tc=ee07e03b594f2d55de15f521e06007c8ba00ef203337ee02c324e8cf207b6218; lang=zh; sensorsdata2015jssdkcross=%7B%22distinct_id%22%3A%2200518%22%2C%22first_id%22%3A%221974ee5f8d548c-0f338d1936b63-19525636-1484784-1974ee5f8d6352e%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%2C%22%24latest_referrer%22%3A%22%22%7D%2C%22identities%22%3A%22eyIkaWRlbnRpdHlfY29va2llX2lkIjoiMTk3NGVlNWY4ZDU0OGMtMGYzMzhkMTkzNmI2My0xOTUyNTYzNi0xNDg0Nzg0LTE5NzRlZTVmOGQ2MzUyZSIsIiRpZGVudGl0eV9sb2dpbl9pZCI6IjAwNTE4In0%3D%22%2C%22history_login_id%22%3A%7B%22name%22%3A%22%24identity_login_id%22%2C%22value%22%3A%2200518%22%7D%7D; prod_explore_session=.eJwljksKAjEQBe-StYukk066vYz0L4wwIMzoRvHuBlzWo-DVJ93mEeeWrs_jFZd0u3u6JmrKAeghXnsIZzRCYAMfPgv0acYyXalE61A8TwJ1KxRNcQgG8WylI_eBvaJnlUEeXQrUXGIYQhueo8p6Ia3gYjaUnVV0iWmFvM44_jW1whr2h8keC99b-v4ATKo1Pw.abKKxQ.OQgSKw2VXNHR063v_1m9A2IZ9AQ; YQG_UNITE_TOKEN_PROD=fc034c31-fbf7-4908-9a7e-2adbc8d82a3d-00518-01; acw_tc=0a02020617757024940072506e006b92ca581eb0f6c3f0d1d86717ffb28c2b' \
+  -H 'origin: https://cicd.fintopia.tech' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://cicd.fintopia.tech/cashloan/clusters/default/devops/cash-loanjqjjq/pipelines/cash-loan-channel-api-cd-canary/blue-green' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36' \
+  --data-raw '{"namespace":"cashloan","name":"java-cash-loan-channel-api","cluster":"prod","weight":{"20260402105140":66,"20260408150316":34}}'
+
+  curl 'https://cicd.fintopia.tech/kapis/cicd.kubesphere.io/v1alpha4/workspaces/default/bluegreen/uploadChangeTrafficEvent' \
+  -H 'accept: */*' \
+  -H 'accept-language: zh-CN,zh;q=0.9' \
+  -H 'content-type: application/json' \
+  -b 'rl_page_init_referrer=RudderEncrypt%3AU2FsdGVkX1%2BzAaS2cI51ki87ZcK7MY2xXr7ATh8MGM9dF%2BnzEjwpJdIm%2BLAiYZdg; rl_page_init_referring_domain=RudderEncrypt%3AU2FsdGVkX19gRlBxvGvHcuvyyTDJdxoTNjZXCWWnODK7T5crySsFgr5MU6InWfmd; YQG_EMAIL_PROD=yijiang@fintopia.tech; rl_anonymous_id=RudderEncrypt%3AU2FsdGVkX19RjHflXBN2uimMKJNxgFnq3d76SGp7a8WODy%2Fit1kbfzi6NfPzorGc4YOiMNyaOoNzXKd1DqSi4w%3D%3D; rl_user_id=RudderEncrypt%3AU2FsdGVkX1%2FCInIJ0raP0e8Y%2FcZpa5ygD%2B4tLFKn8rSp6ygBJml14mrRlMVNjD74qNXe8uX0VARozcKx7Xm7UhTVoIAOSrpIIAKkctyIEqwRjbkS%2FLQGs2PcbW%2FF8mRyqTgL0hnuSHM6uAls3gyai%2FPoLVlIeA3fZ2JQcwCgaEQ%3D; rl_trait=RudderEncrypt%3AU2FsdGVkX1%2FUopfaxVDzTXaKdDuWz%2FRYoywH2HTyO1hZ%2FNNj%2BIkINfWGo6ScRnu3pF3btXmpD9MYUoM5SntkG%2BiDaha8b3%2ByVmsE1sPWpCfAoTlLgN%2B8nFWrrDhuADupXkN6l1ezkSXRoLvyq9jvHg%3D%3D; rl_session=RudderEncrypt%3AU2FsdGVkX1%2FGdo3RrxDbN2Jmg%2BiQjaJyQguTaI2Im%2BavuZGilkGvGckIldqkZRlUl1sub9AeXYnQc%2BcB%2BA46VEpo2Wf9udyijPq7OiwJLcs8vj636987anZtfkHSJu2IdvlgAjfoVGRODAxTe4kC5A%3D%3D; ph_phc_4URIAm1uYfJO7j8kWSe0J8lc8IqnstRLS7Jx8NcakHo_posthog=%7B%22%24device_id%22%3A%22019bfd5e-fdb3-7350-8d61-24dd9cdaaf9b%22%2C%22distinct_id%22%3A%22e90c6a47a5da3696b329271961f691e0c4f52f90c9a7e25da074264060ca2bf2%2342d543ee-3e8a-47ab-803e-14dd6172271f%22%2C%22%24sesid%22%3A%5B1772270078176%2C%22019ca387-48e2-7080-b25b-4aa8348e8b33%22%2C1772270078176%5D%2C%22%24epp%22%3Atrue%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fn8n.fintopia.tech%2Fhome%2Fworkflows%22%7D%2C%22%24user_state%22%3A%22identified%22%7D; aliyungf_tc=ee07e03b594f2d55de15f521e06007c8ba00ef203337ee02c324e8cf207b6218; lang=zh; sensorsdata2015jssdkcross=%7B%22distinct_id%22%3A%2200518%22%2C%22first_id%22%3A%221974ee5f8d548c-0f338d1936b63-19525636-1484784-1974ee5f8d6352e%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%2C%22%24latest_referrer%22%3A%22%22%7D%2C%22identities%22%3A%22eyIkaWRlbnRpdHlfY29va2llX2lkIjoiMTk3NGVlNWY4ZDU0OGMtMGYzMzhkMTkzNmI2My0xOTUyNTYzNi0xNDg0Nzg0LTE5NzRlZTVmOGQ2MzUyZSIsIiRpZGVudGl0eV9sb2dpbl9pZCI6IjAwNTE4In0%3D%22%2C%22history_login_id%22%3A%7B%22name%22%3A%22%24identity_login_id%22%2C%22value%22%3A%2200518%22%7D%7D; prod_explore_session=.eJwljksKAjEQBe-StYukk066vYz0L4wwIMzoRvHuBlzWo-DVJ93mEeeWrs_jFZd0u3u6JmrKAeghXnsIZzRCYAMfPgv0acYyXalE61A8TwJ1KxRNcQgG8WylI_eBvaJnlUEeXQrUXGIYQhueo8p6Ia3gYjaUnVV0iWmFvM44_jW1whr2h8keC99b-v4ATKo1Pw.abKKxQ.OQgSKw2VXNHR063v_1m9A2IZ9AQ; YQG_UNITE_TOKEN_PROD=fc034c31-fbf7-4908-9a7e-2adbc8d82a3d-00518-01; acw_tc=0a02020617757024940072506e006b92ca581eb0f6c3f0d1d86717ffb28c2b' \
+  -H 'origin: https://cicd.fintopia.tech' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://cicd.fintopia.tech/cashloan/clusters/default/devops/cash-loanjqjjq/pipelines/cash-loan-channel-api-cd-canary/blue-green' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36' \
+  --data-raw '{"devops_project":"cash-loanjqjjq","pipeline":"cash-loan-channel-api-cd-canary","project":"cash-loan","module":"cash-loan-channel-api","env_name":"prod","blue_version":"20260402105140","green_version":"20260408150316","pipeline_run_id":"cash-loan-channel-api-cd-canary-vkmgx","blue_value":0.66,"green_value":0.34,"before_blue_value":0.79,"before_green_value":0.21,"jenkins_build_id":"954","operator":"yijiang"}'
+
+
+  curl 'https://cicd.fintopia.tech/kapis/cicd.kubesphere.io/v1alpha4/workspaces/cashloan/canary-deploy/canaryDeployment?namespace=cashloan&name=java-cash-loan-channel-api&cluster=prod' \
+  -H 'accept: */*' \
+  -H 'accept-language: zh-CN,zh;q=0.9' \
+  -H 'content-type: application/json' \
+  -b 'rl_page_init_referrer=RudderEncrypt%3AU2FsdGVkX1%2BzAaS2cI51ki87ZcK7MY2xXr7ATh8MGM9dF%2BnzEjwpJdIm%2BLAiYZdg; rl_page_init_referring_domain=RudderEncrypt%3AU2FsdGVkX19gRlBxvGvHcuvyyTDJdxoTNjZXCWWnODK7T5crySsFgr5MU6InWfmd; YQG_EMAIL_PROD=yijiang@fintopia.tech; rl_anonymous_id=RudderEncrypt%3AU2FsdGVkX19RjHflXBN2uimMKJNxgFnq3d76SGp7a8WODy%2Fit1kbfzi6NfPzorGc4YOiMNyaOoNzXKd1DqSi4w%3D%3D; rl_user_id=RudderEncrypt%3AU2FsdGVkX1%2FCInIJ0raP0e8Y%2FcZpa5ygD%2B4tLFKn8rSp6ygBJml14mrRlMVNjD74qNXe8uX0VARozcKx7Xm7UhTVoIAOSrpIIAKkctyIEqwRjbkS%2FLQGs2PcbW%2FF8mRyqTgL0hnuSHM6uAls3gyai%2FPoLVlIeA3fZ2JQcwCgaEQ%3D; rl_trait=RudderEncrypt%3AU2FsdGVkX1%2FUopfaxVDzTXaKdDuWz%2FRYoywH2HTyO1hZ%2FNNj%2BIkINfWGo6ScRnu3pF3btXmpD9MYUoM5SntkG%2BiDaha8b3%2ByVmsE1sPWpCfAoTlLgN%2B8nFWrrDhuADupXkN6l1ezkSXRoLvyq9jvHg%3D%3D; rl_session=RudderEncrypt%3AU2FsdGVkX1%2FGdo3RrxDbN2Jmg%2BiQjaJyQguTaI2Im%2BavuZGilkGvGckIldqkZRlUl1sub9AeXYnQc%2BcB%2BA46VEpo2Wf9udyijPq7OiwJLcs8vj636987anZtfkHSJu2IdvlgAjfoVGRODAxTe4kC5A%3D%3D; ph_phc_4URIAm1uYfJO7j8kWSe0J8lc8IqnstRLS7Jx8NcakHo_posthog=%7B%22%24device_id%22%3A%22019bfd5e-fdb3-7350-8d61-24dd9cdaaf9b%22%2C%22distinct_id%22%3A%22e90c6a47a5da3696b329271961f691e0c4f52f90c9a7e25da074264060ca2bf2%2342d543ee-3e8a-47ab-803e-14dd6172271f%22%2C%22%24sesid%22%3A%5B1772270078176%2C%22019ca387-48e2-7080-b25b-4aa8348e8b33%22%2C1772270078176%5D%2C%22%24epp%22%3Atrue%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fn8n.fintopia.tech%2Fhome%2Fworkflows%22%7D%2C%22%24user_state%22%3A%22identified%22%7D; aliyungf_tc=ee07e03b594f2d55de15f521e06007c8ba00ef203337ee02c324e8cf207b6218; lang=zh; sensorsdata2015jssdkcross=%7B%22distinct_id%22%3A%2200518%22%2C%22first_id%22%3A%221974ee5f8d548c-0f338d1936b63-19525636-1484784-1974ee5f8d6352e%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%2C%22%24latest_referrer%22%3A%22%22%7D%2C%22identities%22%3A%22eyIkaWRlbnRpdHlfY29va2llX2lkIjoiMTk3NGVlNWY4ZDU0OGMtMGYzMzhkMTkzNmI2My0xOTUyNTYzNi0xNDg0Nzg0LTE5NzRlZTVmOGQ2MzUyZSIsIiRpZGVudGl0eV9sb2dpbl9pZCI6IjAwNTE4In0%3D%22%2C%22history_login_id%22%3A%7B%22name%22%3A%22%24identity_login_id%22%2C%22value%22%3A%2200518%22%7D%7D; prod_explore_session=.eJwljksKAjEQBe-StYukk066vYz0L4wwIMzoRvHuBlzWo-DVJ93mEeeWrs_jFZd0u3u6JmrKAeghXnsIZzRCYAMfPgv0acYyXalE61A8TwJ1KxRNcQgG8WylI_eBvaJnlUEeXQrUXGIYQhueo8p6Ia3gYjaUnVV0iWmFvM44_jW1whr2h8keC99b-v4ATKo1Pw.abKKxQ.OQgSKw2VXNHR063v_1m9A2IZ9AQ; YQG_UNITE_TOKEN_PROD=fc034c31-fbf7-4908-9a7e-2adbc8d82a3d-00518-01; acw_tc=0a02020617757024940072506e006b92ca581eb0f6c3f0d1d86717ffb28c2b' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://cicd.fintopia.tech/cashloan/clusters/default/devops/cash-loanjqjjq/pipelines/cash-loan-channel-api-cd-canary/blue-green' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36'
+
+
+  当前分流比例：
+  curl 'https://cicd.fintopia.tech/kapis/cicd.kubesphere.io/v1alpha4/workspaces/default/bluegreen/log?pipeline=cash-loan-channel-api-cd-canary&env=prod&limit=10&page=1' \
+  -H 'accept: */*' \
+  -H 'accept-language: zh-CN,zh;q=0.9' \
+  -H 'content-type: application/json' \
+  -b 'rl_page_init_referrer=RudderEncrypt%3AU2FsdGVkX1%2BzAaS2cI51ki87ZcK7MY2xXr7ATh8MGM9dF%2BnzEjwpJdIm%2BLAiYZdg; rl_page_init_referring_domain=RudderEncrypt%3AU2FsdGVkX19gRlBxvGvHcuvyyTDJdxoTNjZXCWWnODK7T5crySsFgr5MU6InWfmd; YQG_EMAIL_PROD=yijiang@fintopia.tech; rl_anonymous_id=RudderEncrypt%3AU2FsdGVkX19RjHflXBN2uimMKJNxgFnq3d76SGp7a8WODy%2Fit1kbfzi6NfPzorGc4YOiMNyaOoNzXKd1DqSi4w%3D%3D; rl_user_id=RudderEncrypt%3AU2FsdGVkX1%2FCInIJ0raP0e8Y%2FcZpa5ygD%2B4tLFKn8rSp6ygBJml14mrRlMVNjD74qNXe8uX0VARozcKx7Xm7UhTVoIAOSrpIIAKkctyIEqwRjbkS%2FLQGs2PcbW%2FF8mRyqTgL0hnuSHM6uAls3gyai%2FPoLVlIeA3fZ2JQcwCgaEQ%3D; rl_trait=RudderEncrypt%3AU2FsdGVkX1%2FUopfaxVDzTXaKdDuWz%2FRYoywH2HTyO1hZ%2FNNj%2BIkINfWGo6ScRnu3pF3btXmpD9MYUoM5SntkG%2BiDaha8b3%2ByVmsE1sPWpCfAoTlLgN%2B8nFWrrDhuADupXkN6l1ezkSXRoLvyq9jvHg%3D%3D; rl_session=RudderEncrypt%3AU2FsdGVkX1%2FGdo3RrxDbN2Jmg%2BiQjaJyQguTaI2Im%2BavuZGilkGvGckIldqkZRlUl1sub9AeXYnQc%2BcB%2BA46VEpo2Wf9udyijPq7OiwJLcs8vj636987anZtfkHSJu2IdvlgAjfoVGRODAxTe4kC5A%3D%3D; ph_phc_4URIAm1uYfJO7j8kWSe0J8lc8IqnstRLS7Jx8NcakHo_posthog=%7B%22%24device_id%22%3A%22019bfd5e-fdb3-7350-8d61-24dd9cdaaf9b%22%2C%22distinct_id%22%3A%22e90c6a47a5da3696b329271961f691e0c4f52f90c9a7e25da074264060ca2bf2%2342d543ee-3e8a-47ab-803e-14dd6172271f%22%2C%22%24sesid%22%3A%5B1772270078176%2C%22019ca387-48e2-7080-b25b-4aa8348e8b33%22%2C1772270078176%5D%2C%22%24epp%22%3Atrue%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fn8n.fintopia.tech%2Fhome%2Fworkflows%22%7D%2C%22%24user_state%22%3A%22identified%22%7D; aliyungf_tc=ee07e03b594f2d55de15f521e06007c8ba00ef203337ee02c324e8cf207b6218; lang=zh; sensorsdata2015jssdkcross=%7B%22distinct_id%22%3A%2200518%22%2C%22first_id%22%3A%221974ee5f8d548c-0f338d1936b63-19525636-1484784-1974ee5f8d6352e%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%2C%22%24latest_referrer%22%3A%22%22%7D%2C%22identities%22%3A%22eyIkaWRlbnRpdHlfY29va2llX2lkIjoiMTk3NGVlNWY4ZDU0OGMtMGYzMzhkMTkzNmI2My0xOTUyNTYzNi0xNDg0Nzg0LTE5NzRlZTVmOGQ2MzUyZSIsIiRpZGVudGl0eV9sb2dpbl9pZCI6IjAwNTE4In0%3D%22%2C%22history_login_id%22%3A%7B%22name%22%3A%22%24identity_login_id%22%2C%22value%22%3A%2200518%22%7D%7D; prod_explore_session=.eJwljksKAjEQBe-StYukk066vYz0L4wwIMzoRvHuBlzWo-DVJ93mEeeWrs_jFZd0u3u6JmrKAeghXnsIZzRCYAMfPgv0acYyXalE61A8TwJ1KxRNcQgG8WylI_eBvaJnlUEeXQrUXGIYQhueo8p6Ia3gYjaUnVV0iWmFvM44_jW1whr2h8keC99b-v4ATKo1Pw.abKKxQ.OQgSKw2VXNHR063v_1m9A2IZ9AQ; YQG_UNITE_TOKEN_PROD=fc034c31-fbf7-4908-9a7e-2adbc8d82a3d-00518-01; acw_tc=0a02020617757024940072506e006b92ca581eb0f6c3f0d1d86717ffb28c2b' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://cicd.fintopia.tech/cashloan/clusters/default/devops/cash-loanjqjjq/pipelines/cash-loan-channel-api-cd-canary/blue-green' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36'
+
+  分流是否可以回滚：curl 'https://aone-extra.fintopia.tech/api/v1/releaseOrder/checkCanRollBack?project=cash-loan&module=cash-loan-channel-api&env=prod&image=release-20260408-4-b532a929-20260408150316' \
+  -H 'accept: */*' \
+  -H 'accept-language: zh-CN,zh;q=0.9' \
+  -H 'content-type: application/json' \
+  -H 'origin: https://cicd.fintopia.tech' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://cicd.fintopia.tech/' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-site' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36'
+
+  curl 'https://cicd.fintopia.tech/kapis/cicd.kubesphere.io/v1alpha4/workspaces/cashloan/bluegreen/preStepCanarySwitchStatus' \
+  -H 'accept: */*' \
+  -H 'accept-language: zh-CN,zh;q=0.9' \
+  -H 'content-type: application/json' \
+  -b 'rl_page_init_referrer=RudderEncrypt%3AU2FsdGVkX1%2BzAaS2cI51ki87ZcK7MY2xXr7ATh8MGM9dF%2BnzEjwpJdIm%2BLAiYZdg; rl_page_init_referring_domain=RudderEncrypt%3AU2FsdGVkX19gRlBxvGvHcuvyyTDJdxoTNjZXCWWnODK7T5crySsFgr5MU6InWfmd; YQG_EMAIL_PROD=yijiang@fintopia.tech; rl_anonymous_id=RudderEncrypt%3AU2FsdGVkX19RjHflXBN2uimMKJNxgFnq3d76SGp7a8WODy%2Fit1kbfzi6NfPzorGc4YOiMNyaOoNzXKd1DqSi4w%3D%3D; rl_user_id=RudderEncrypt%3AU2FsdGVkX1%2FCInIJ0raP0e8Y%2FcZpa5ygD%2B4tLFKn8rSp6ygBJml14mrRlMVNjD74qNXe8uX0VARozcKx7Xm7UhTVoIAOSrpIIAKkctyIEqwRjbkS%2FLQGs2PcbW%2FF8mRyqTgL0hnuSHM6uAls3gyai%2FPoLVlIeA3fZ2JQcwCgaEQ%3D; rl_trait=RudderEncrypt%3AU2FsdGVkX1%2FUopfaxVDzTXaKdDuWz%2FRYoywH2HTyO1hZ%2FNNj%2BIkINfWGo6ScRnu3pF3btXmpD9MYUoM5SntkG%2BiDaha8b3%2ByVmsE1sPWpCfAoTlLgN%2B8nFWrrDhuADupXkN6l1ezkSXRoLvyq9jvHg%3D%3D; rl_session=RudderEncrypt%3AU2FsdGVkX1%2FGdo3RrxDbN2Jmg%2BiQjaJyQguTaI2Im%2BavuZGilkGvGckIldqkZRlUl1sub9AeXYnQc%2BcB%2BA46VEpo2Wf9udyijPq7OiwJLcs8vj636987anZtfkHSJu2IdvlgAjfoVGRODAxTe4kC5A%3D%3D; ph_phc_4URIAm1uYfJO7j8kWSe0J8lc8IqnstRLS7Jx8NcakHo_posthog=%7B%22%24device_id%22%3A%22019bfd5e-fdb3-7350-8d61-24dd9cdaaf9b%22%2C%22distinct_id%22%3A%22e90c6a47a5da3696b329271961f691e0c4f52f90c9a7e25da074264060ca2bf2%2342d543ee-3e8a-47ab-803e-14dd6172271f%22%2C%22%24sesid%22%3A%5B1772270078176%2C%22019ca387-48e2-7080-b25b-4aa8348e8b33%22%2C1772270078176%5D%2C%22%24epp%22%3Atrue%2C%22%24initial_person_info%22%3A%7B%22r%22%3A%22%24direct%22%2C%22u%22%3A%22https%3A%2F%2Fn8n.fintopia.tech%2Fhome%2Fworkflows%22%7D%2C%22%24user_state%22%3A%22identified%22%7D; aliyungf_tc=ee07e03b594f2d55de15f521e06007c8ba00ef203337ee02c324e8cf207b6218; lang=zh; sensorsdata2015jssdkcross=%7B%22distinct_id%22%3A%2200518%22%2C%22first_id%22%3A%221974ee5f8d548c-0f338d1936b63-19525636-1484784-1974ee5f8d6352e%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%2C%22%24latest_referrer%22%3A%22%22%7D%2C%22identities%22%3A%22eyIkaWRlbnRpdHlfY29va2llX2lkIjoiMTk3NGVlNWY4ZDU0OGMtMGYzMzhkMTkzNmI2My0xOTUyNTYzNi0xNDg0Nzg0LTE5NzRlZTVmOGQ2MzUyZSIsIiRpZGVudGl0eV9sb2dpbl9pZCI6IjAwNTE4In0%3D%22%2C%22history_login_id%22%3A%7B%22name%22%3A%22%24identity_login_id%22%2C%22value%22%3A%2200518%22%7D%7D; prod_explore_session=.eJwljksKAjEQBe-StYukk066vYz0L4wwIMzoRvHuBlzWo-DVJ93mEeeWrs_jFZd0u3u6JmrKAeghXnsIZzRCYAMfPgv0acYyXalE61A8TwJ1KxRNcQgG8WylI_eBvaJnlUEeXQrUXGIYQhueo8p6Ia3gYjaUnVV0iWmFvM44_jW1whr2h8keC99b-v4ATKo1Pw.abKKxQ.OQgSKw2VXNHR063v_1m9A2IZ9AQ; YQG_UNITE_TOKEN_PROD=fc034c31-fbf7-4908-9a7e-2adbc8d82a3d-00518-01; acw_tc=0a0201fa17757043249748492e007393d5c5bdd1b52fb3b1859703caff7a5c' \
+  -H 'origin: https://cicd.fintopia.tech' \
+  -H 'priority: u=1, i' \
+  -H 'referer: https://cicd.fintopia.tech/cashloan/clusters/default/devops/cash-loanjqjjq/pipelines/cash-loan-channel-api-cd-canary/blue-green' \
+  -H 'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: same-origin' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36' \
+  --data-raw '{"devops":"cash-loanjqjjq","pipeline":"cash-loan-channel-api-cd-canary","buildEnv":"prod"}'
+

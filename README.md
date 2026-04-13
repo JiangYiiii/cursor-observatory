@@ -45,12 +45,12 @@ Observatory 在单个扩展内同时提供：**数据采集**、**项目内 JSON
 | **侧栏** | 活动栏 **Observatory** 容器中的 **Capabilities** 树，展示当前工作区能力状态（数据来自 Store）。 |
 | **仪表盘** | 命令 **Open Dashboard** 打开内嵌 Webview；与本地 **Express** 服务配合，提供 REST、**WebSocket** 推送刷新；前端可在断连时降级为 HTTP 轮询。 |
 | **浏览器访问** | 本地服务启动后，可用浏览器访问 **`http://127.0.0.1:<端口>`**（默认端口见设置），与内嵌 UI 同源能力（静态资源由扩展目录提供）。 |
-| **质量与测试** | 支持 **pytest-json-report**、规范化 **report.json**、**JUnit/Surefire XML** 等导入，更新 `report.json`/`test-mapping.json` 并追加 `test-history.jsonl`；可选集成终端在 pytest / **mvn test** / **gradlew test** 结束后自动导入（见 `observatory.test.autoIngestTestReport`）。 |
+| **质量与测试** | 支持 **pytest-json-report**、规范化 **report.json**、**JUnit/Surefire XML** 等导入，更新 `report.json`/`test-mapping.json` 并追加 `test-history.jsonl`；可选集成终端在 pytest / **mvn test** / **gradlew test** 结束后自动导入（见 `observatory.utTest.autoIngest`）。 |
 | **能力阶段自动化** | 监听 **Agent 转录**（`.jsonl`），按对话关键词**上调**能力阶段；测试结果导入且 `by_capability` 全通过时，可将「测试中」标为 **已完成**；Git 新提交若含 `Observatory: <能力id>` 行则标为 **已发布**。 |
 | **数据模型 AI 引导** | 命令 **Open Data Model AI Prompt** 生成说明文档，便于让 AI 输出完整 `data-models.json`（替代仅依赖 SQL 正则扫描）。 |
 | **项目初始化 Rule** | **Initialize Project** 时可在 `.cursor/rules/observatory-project.mdc` 写入协作约定（可关）。 |
 | **可靠性** | 统一错误体 `{ code, message, detail, retryable }`；扩展侧 **状态机**（如 INITIALIZING / READY / SCANNING / DEGRADED 等）；HTTP 服务启动失败时可进入降级路径。 |
-| **需求面板 V2** | SDD 能力右侧详情：需求链接（TAPD 时可一键复制 AI 指令拉取 MCP 详情 / Cheetah+Git 分支工作流）、`specs/<feature>/observatory/` 下的 `impact-analysis` / `test-cases` JSON 与派生 Markdown（兼容 `Observatory` 目录名大小写）、`observatory-sdd.json` 与部署手工服务列表、UT/部署/测试用例 Prompt、MCP 预检与 Git 新鲜度；配置项见 `observatory.prompt.*` / `observatory.skill.*` / `observatory.mcp.*` / `observatory.deploy.defaultServiceList`。设计见 `docs/REQUIREMENT_PANEL_V2_DESIGN.md`，使用说明见 `docs/USER_GUIDE.md` §8。 |
+| **需求面板 V2** | SDD 能力右侧详情：需求链接（TAPD 时可一键复制 AI 指令拉取 MCP 详情 / Cheetah+Git 分支工作流）、`specs/<feature>/observatory/` 下的 `impact-analysis` / `test-cases` JSON 与派生 Markdown（兼容 `Observatory` 目录名大小写）、`observatory-sdd.json` 与部署手工服务列表、UT/部署/测试用例 Prompt、MCP 预检与 Git 新鲜度；配置项见 `observatory.sddArtifacts.*` / `observatory.utTest.*` / `observatory.codeSubmit.*` / `observatory.deploy.*` / `observatory.testCases.*` 等（设置中搜 `observatory`）。设计见 `docs/REQUIREMENT_PANEL_V2_DESIGN.md`，使用说明见 `docs/USER_GUIDE.md` §8。 |
 
 仪表盘内各面板（概览、架构、能力看板、数据模型、AI 会话、质量监控等）的**详细交互**以 `docs/FRONTEND_DESIGN.md` 与实现为准；上表为产品级能力边界说明。
 
@@ -100,12 +100,12 @@ Observatory 在单个扩展内同时提供：**数据采集**、**项目内 JSON
 1. 用 Cursor **打开项目根目录**（或添加为多根工作区中的一个文件夹）。  
 2. 执行 **Initialize Project**，确认根目录下生成 `.observatory/`。  
 3. 执行 **Open Dashboard** 查看仪表盘；需要时用浏览器访问同端口页面做并行查看。  
-4. 日常可 **Run Full Scan** 刷新结构/能力数据；跑完测试后使用 **Import Test Report**，或开启 **`observatory.test.autoIngestTestReport`** 依赖自动导入（集成终端 pytest / Maven / Gradle 结束后优先拾取较新的 SDD **`report.json`**，否则聚合 Surefire XML；**`specs/**/observatory/report.json`**（及兼容 `test/`）保存时也会去抖后自动导入，见 `docs/USER_GUIDE.md`）。  
+4. 日常可 **Run Full Scan** 刷新结构/能力数据；跑完测试后使用 **Import Test Report**，或开启 **`observatory.utTest.autoIngest`** 依赖自动导入（集成终端 pytest / Maven / Gradle 结束后优先拾取较新的 SDD **`report.json`**，否则聚合 Surefire XML；**`specs/**/observatory/report.json`**（及兼容 `test/`）保存时也会去抖后自动导入，见 `docs/USER_GUIDE.md`）。  
 5. 排查扩展行为时打开 **输出** 面板，选择 **「Observatory」** 频道查看日志。
 
 ### 测试与质量数据（摘要）
 
-- 使用 **`pytest --json-report`**、**Surefire `TEST-*.xml`** 等生成报告后，可通过 **Import Test Report** 导入；若开启 **`observatory.test.autoIngestTestReport`**（旧键 `autoIngestPytestReport` 仍兼容），集成终端在 pytest / Maven / Gradle 测试结束后会自动拾取：**SDD 下优先较新（约 2 分钟内）的 `specs/<active>/observatory/` 中 `report.json` 或 `pytest-report.json`**（含带 `by_capability` 的规范化 JSON），**否则**聚合 Surefire / Gradle 的 JUnit XML。另监听 **`specs/**/observatory/report.json`** 与兼容 **`specs/**/test/report.json`** 的写入/保存（去抖时间同 **`observatory.scan.debounceMs`**），便于测试结束后再更新 JSON。详见 `docs/USER_GUIDE.md`。  
+- 使用 **`pytest --json-report`**、**Surefire `TEST-*.xml`** 等生成报告后，可通过 **Import Test Report** 导入；若开启 **`observatory.utTest.autoIngest`**（旧键 `test.autoIngestTestReport` / `test.autoIngestPytestReport` 仍兼容），集成终端在 pytest / Maven / Gradle 测试结束后会自动拾取：**SDD 下优先较新（约 2 分钟内）的 `specs/<active>/observatory/` 中 `report.json` 或 `pytest-report.json`**（含带 `by_capability` 的规范化 JSON），**否则**聚合 Surefire / Gradle 的 JUnit XML。另监听 **`specs/**/observatory/report.json`** 与兼容 **`specs/**/test/report.json`** 的写入/保存（去抖时间同 **`observatory.scan.debounceMs`**），便于测试结束后再更新 JSON。详见 `docs/USER_GUIDE.md`。  
 - 详细字段与映射规则见 **`docs/QUALITY_MONITOR_DESIGN.md`** 与 **`docs/SCHEMA_SPEC.md`**。
 
 ---
@@ -119,18 +119,16 @@ Observatory 在单个扩展内同时提供：**数据采集**、**项目内 JSON
 | `observatory.server.port` | number | `3800` | 本地 HTTP 服务监听端口；若被占用，实现会尝试使用其它可用端口。 |
 | `observatory.server.autoStart` | boolean | `true` | 扩展激活时是否自动启动本地 HTTP 服务。 |
 | `observatory.scan.debounceMs` | number | `5000` | 文件变更触发扫描的去抖时间（毫秒）。 |
-| `observatory.scan.ignorePaths` | string[] | `node_modules`, `.venv`, `__pycache__` | 扫描时忽略的路径片段。 |
 | `observatory.git.watchEnabled` | boolean | `true` | 是否启用 Git 相关监听。 |
 | `observatory.transcript.watchEnabled` | boolean | `true` | 是否启用 Agent 会话轨迹相关监听。 |
-| `observatory.test.framework` | enum | `auto` | 测试框架提示：`auto` / `pytest` / `jest` / `junit`。 |
-| `observatory.test.autoDetectResults` | boolean | `true` | 是否自动探测测试结果产物。 |
-| `observatory.test.autoIngestTestReport` | boolean | `true` | 集成终端中 pytest / mvn test / gradlew test 结束后自动导入；SDD 优先较新的 `specs/<active>/observatory/report.json`（先于 JUnit XML）。另在 `specs/**/observatory/report.json` 与兼容 `test/` 保存时自动导入（与终端短窗口去重）。旧键 `autoIngestPytestReport` 仍兼容。 |
+| `observatory.utTest.framework` | enum | `auto` | 测试框架提示：`auto` / `pytest` / `jest` / `junit`（旧键 `test.framework` 仍兼容）。 |
+| `observatory.utTest.autoIngest` | boolean | `true` | 集成终端中 pytest / mvn test / gradlew test 结束后自动导入；SDD 优先较新的 `specs/<active>/observatory/report.json`（先于 JUnit XML）。另在 `specs/**/observatory/report.json` 与兼容 `test/` 保存时自动导入（与终端短窗口去重）。旧键 `test.autoIngestTestReport` 等仍兼容。 |
 | `observatory.transcript.agentTranscriptsPath` | string | `""` | **手动指定** `agent-transcripts` 目录（绝对路径，或 `${workspaceFolder}` 相对路径）；留空则按 `~/.cursor/projects/<工作区路径 slug>/agent-transcripts` 等规则自动探测。 |
 | `observatory.capability.aiPhaseInferenceEnabled` | boolean | `true` | 是否根据 Agent 会话文本自动上调能力阶段。 |
 | `observatory.capability.autoCompleteOnTestsPass` | boolean | `true` | 导入测试结果后，是否将「测试中」且 `by_capability` 全通过的能力标为 **已完成**。 |
 | `observatory.onboarding.createCursorRule` | boolean | `true` | Initialize 时是否创建 `.cursor/rules/observatory-project.mdc`。 |
 | `observatory.deploy.defaultServiceList` | string | `""` | 需求面板「环境部署」：影响分析未列出应用服务时，与需求级 `deployServiceList` 合并的默认服务名（英文逗号分隔）。 |
-| `observatory.mcp.cheetah` | string | `""` | Cheetah（泳道/OpenAPI）MCP 服务名；TAPD 需求链接旁「分支工作流」复制 Prompt 中引用。 |
+| `observatory.deploy.cheetahMcp` | string | `""` | Cheetah（泳道/OpenAPI）MCP 服务名；TAPD 需求链接旁「分支工作流」复制 Prompt 中引用（旧键 `mcp.cheetah` 仍兼容）。 |
 
 **Git 提交与「已发布」**：在新提交说明中单独一行写 `Observatory: cap-id-one,cap-id-two`（或 `能力:` 前缀），扩展会将对应能力阶段设为 **released**。
 
@@ -246,4 +244,11 @@ MIT
 # 启动命令
 cd webview-ui && npm install && npm run build
 cd ../extension && npm install && npm run build && npm run package
+```
+
+
+```
+cd /extension
+export OVSX_PAT="$(tr -d '\n' < ../cursor-observatory-token.txt)"
+npx ovsx publish cursor-observatory-0.1.1.vsix -p "$OVSX_PAT"
 ```

@@ -33,6 +33,11 @@ const SessionManager = lazy(() =>
 const DocsHealth = lazy(() =>
   import("./views/DocsHealth").then((m) => ({ default: m.DocsHealth }))
 );
+const ReleaseWorkflow = lazy(() =>
+  import("./views/ReleaseWorkflow").then((m) => ({
+    default: m.ReleaseWorkflow,
+  }))
+);
 
 export function AppRoutes() {
   return (
@@ -47,6 +52,7 @@ export function AppRoutes() {
         <Route path="/ai-sessions" element={<AiSessions />} />
         <Route path="/sessions" element={<SessionManager />} />
         <Route path="/docs-health" element={<DocsHealth />} />
+        <Route path="/release" element={<ReleaseWorkflow />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

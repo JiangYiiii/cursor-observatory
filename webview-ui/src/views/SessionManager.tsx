@@ -141,7 +141,7 @@ export function SessionManager() {
   }
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto lg:flex-row">
       <div className="min-w-0 flex-1 space-y-3">
         <Card
           title="会话列表"

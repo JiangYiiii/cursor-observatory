@@ -2,6 +2,7 @@
  * Local HTTP + WebSocket for browser dashboard.
  * primary_doc: docs/EXTENSION_DESIGN.md §七, docs/ARCHITECTURE.md §4.2
  */
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as http from "node:http";
@@ -26,7 +27,19 @@ import { runSingleSddFeatureScan } from "../scanners/project-scanner";
 import { getDataModelAiPromptMarkdown } from "../observatory/project-onboarding";
 import { findAvailablePort } from "./port-utils";
 import { getGitInfoSummary } from "../observatory/git-info-summary";
+import { getReleaseDiffPayload } from "../observatory/git-release-diff";
 import { runPreflight } from "../observatory/preflight-resolver";
+import type { ReleaseHandler } from "../release/release-handler";
+import { ObservatoryError } from "../observatory/errors";
+import { getObservatoryDocsSettings } from "../observatory/docs-config";
+import {
+  getDocsTree,
+  readDocsFileUtf8,
+  parseDocsRelativePathParam,
+  readDocsCatalogIfExists,
+  listAiIndexSummaries,
+} from "../observatory/workspace-docs";
+import { resolveRegisteredWorkspaceKey } from "../observatory/workspace-root-resolve";
 
 export type GetStore = (workspaceRoot: string) => ObservatoryStore | undefined;
 
@@ -42,6 +55,8 @@ export class LocalServer {
   private clients = new Set<WebSocket>();
   /** 绑定成功后的实际端口（可能与配置起始端口不同） */
   private actualPort: number;
+  /** Session token for /api/release/* auth — regenerated per extension lifecycle */
+  private readonly releaseSessionToken = crypto.randomUUID();
 
   constructor(
     private readonly requestedPort: number,
@@ -49,7 +64,8 @@ export class LocalServer {
     private readonly webviewDist: string | undefined,
     /** 已注册的多根工作区路径（供 Dashboard 项目切换） */
     private readonly listWorkspaceRoots?: () => string[],
-    private readonly getDeployExtensionSettings?: GetDeployExtensionSettings
+    private readonly getDeployExtensionSettings?: GetDeployExtensionSettings,
+    private readonly releaseHandler?: ReleaseHandler,
   ) {
     this.actualPort = requestedPort;
   }
@@ -74,7 +90,7 @@ export class LocalServer {
     app.use((req, res, next) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
       if (req.method === "OPTIONS") {
         res.status(204).end();
         return;
@@ -100,6 +116,27 @@ export class LocalServer {
       void (async () => {
         try {
           const data = await getGitInfoSummary(workspaceRoot);
+          sendJson(res, data);
+        } catch (e) {
+          err(res, "GIT_FAILED", String(e), 500);
+        }
+      })();
+    });
+
+    app.get("/api/observatory/release-diff", (req, res) => {
+      const root = pickRoot(req);
+      if (!root) {
+        err(res, "BAD_REQUEST", "missing ?root= workspace path", 400);
+        return;
+      }
+      const workspaceRoot = path.normalize(root);
+      if (!this.getStore(workspaceRoot)) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      void (async () => {
+        try {
+          const data = await getReleaseDiffPayload(workspaceRoot);
           sendJson(res, data);
         } catch (e) {
           err(res, "GIT_FAILED", String(e), 500);
@@ -664,6 +701,159 @@ export class LocalServer {
     app.get("/api/observatory/docs-health", (req, res) =>
       void readObs(req, res, "docs-health.json")
     );
+
+    const sendObservatoryError = (
+      res: express.Response,
+      e: ObservatoryError
+    ): void => {
+      const code = e.code;
+      const status =
+        code === "NOT_FOUND"
+          ? 404
+          : code === "BAD_REQUEST"
+            ? 400
+            : code === "PAYLOAD_TOO_LARGE"
+              ? 413
+              : code === "READ_FAILED"
+                ? 500
+                : 500;
+      err(res, code, e.message, status, e.detail);
+    };
+
+    app.get("/api/workspace/docs-config", (req, res) => {
+      const root = pickRoot(req);
+      if (!root) {
+        err(res, "BAD_REQUEST", "missing ?root= workspace path", 400);
+        return;
+      }
+      const workspaceRoot = resolveRegisteredWorkspaceKey(
+        (r) => this.getStore(r),
+        this.listWorkspaceRoots?.() ?? [],
+        root
+      );
+      if (!workspaceRoot) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      const s = getObservatoryDocsSettings(workspaceRoot);
+      sendJson(res, {
+        docsRoot: s.docsRoot,
+        aiDocIndexRelativePath: s.aiDocIndexRelativePath,
+        semanticIndexGlob: s.semanticIndexGlob,
+      });
+    });
+
+    app.get("/api/workspace/docs-tree", (req, res) => {
+      const root = pickRoot(req);
+      if (!root) {
+        err(res, "BAD_REQUEST", "missing ?root= workspace path", 400);
+        return;
+      }
+      const workspaceRoot = resolveRegisteredWorkspaceKey(
+        (r) => this.getStore(r),
+        this.listWorkspaceRoots?.() ?? [],
+        root
+      );
+      if (!workspaceRoot) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      void (async () => {
+        try {
+          const data = await getDocsTree(workspaceRoot);
+          sendJson(res, data);
+        } catch (e) {
+          if (e instanceof ObservatoryError) {
+            sendObservatoryError(res, e);
+            return;
+          }
+          err(res, "READ_FAILED", String(e), 500);
+        }
+      })();
+    });
+
+    app.get("/api/workspace/docs-file", (req, res) => {
+      const root = pickRoot(req);
+      if (!root) {
+        err(res, "BAD_REQUEST", "missing ?root= workspace path", 400);
+        return;
+      }
+      const workspaceRoot = resolveRegisteredWorkspaceKey(
+        (r) => this.getStore(r),
+        this.listWorkspaceRoots?.() ?? [],
+        root
+      );
+      if (!workspaceRoot) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      const rawRel = req.query.relativePath;
+      void (async () => {
+        try {
+          const posix = parseDocsRelativePathParam(
+            typeof rawRel === "string" ? rawRel : ""
+          );
+          const data = await readDocsFileUtf8(workspaceRoot, posix);
+          sendJson(res, data);
+        } catch (e) {
+          if (e instanceof ObservatoryError) {
+            sendObservatoryError(res, e);
+            return;
+          }
+          err(res, "READ_FAILED", String(e), 500);
+        }
+      })();
+    });
+
+    app.get("/api/workspace/docs-catalog", (req, res) => {
+      const root = pickRoot(req);
+      if (!root) {
+        err(res, "BAD_REQUEST", "missing ?root= workspace path", 400);
+        return;
+      }
+      const workspaceRoot = resolveRegisteredWorkspaceKey(
+        (r) => this.getStore(r),
+        this.listWorkspaceRoots?.() ?? [],
+        root
+      );
+      if (!workspaceRoot) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      void (async () => {
+        const data = await readDocsCatalogIfExists(workspaceRoot);
+        if (data === null) {
+          err(res, "NOT_FOUND", "docs-catalog.json", 404);
+          return;
+        }
+        sendJson(res, data);
+      })();
+    });
+
+    app.get("/api/workspace/docs-ai-indices", (req, res) => {
+      const root = pickRoot(req);
+      if (!root) {
+        err(res, "BAD_REQUEST", "missing ?root= workspace path", 400);
+        return;
+      }
+      const workspaceRoot = resolveRegisteredWorkspaceKey(
+        (r) => this.getStore(r),
+        this.listWorkspaceRoots?.() ?? [],
+        root
+      );
+      if (!workspaceRoot) {
+        err(res, "NOT_FOUND", "workspace not registered", 404);
+        return;
+      }
+      void (async () => {
+        try {
+          const data = await listAiIndexSummaries(workspaceRoot);
+          sendJson(res, data);
+        } catch (e) {
+          err(res, "READ_FAILED", String(e), 500);
+        }
+      })();
+    });
     app.get("/api/observatory/sessions-index", (req, res) =>
       void readObs(req, res, path.join("sessions", "index.json"))
     );
@@ -704,6 +894,241 @@ export class LocalServer {
         sendJson(res, []);
       }
     });
+
+    // ──────────── Release workflow routes ────────────
+
+    const releaseAuthMiddleware: express.RequestHandler = (req, res, next) => {
+      const auth = req.headers.authorization;
+      if (auth !== `Bearer ${this.releaseSessionToken}`) {
+        return res.status(403).json({ code: "UNAUTHORIZED", message: "Invalid session token" });
+      }
+      next();
+    };
+
+    const handler = this.releaseHandler;
+
+    app.get("/api/release/session-token", (_req, res) => {
+      sendJson(res, { token: this.releaseSessionToken });
+    });
+
+    if (handler) {
+      app.get("/api/release/env-status", releaseAuthMiddleware, (_req, res) => {
+        void (async () => {
+          try {
+            const data = await handler.getEnvStatus();
+            sendJson(res, data);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.get("/api/release/pipelines", releaseAuthMiddleware, (_req, res) => {
+        void (async () => {
+          try {
+            const data = await handler.listPipelines();
+            sendJson(res, data);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.get("/api/release/pipeline-stage-summaries", releaseAuthMiddleware, (_req, res) => {
+        void (async () => {
+          try {
+            const data = await handler.listStageSummaries();
+            sendJson(res, data);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.get("/api/release/pipelines/:name/latest-run", releaseAuthMiddleware, (req, res) => {
+        void (async () => {
+          try {
+            const data = await handler.getLatestRun(req.params.name);
+            sendJson(res, data ?? null);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.get("/api/release/pipeline-runs/:runId/nodes", releaseAuthMiddleware, (req, res) => {
+        void (async () => {
+          try {
+            const data = await handler.getRunNodes(req.params.runId);
+            sendJson(res, data);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.get("/api/release/images/:repoName", releaseAuthMiddleware, (req, res) => {
+        void (async () => {
+          try {
+            const data = await handler.listImages(req.params.repoName);
+            sendJson(res, data);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.post("/api/release/deploy", releaseAuthMiddleware, (req, res) => {
+        void (async () => {
+          try {
+            const {
+              pipelineName,
+              fullModuleName,
+              imageTag,
+              ksPipelineType,
+              includeCanaryDeployHeader,
+            } = req.body as {
+              pipelineName: string;
+              fullModuleName: string;
+              imageTag: string;
+              ksPipelineType?: string;
+              includeCanaryDeployHeader?: boolean;
+            };
+            if (!pipelineName || !fullModuleName || !imageTag) {
+              err(res, "BAD_REQUEST", "pipelineName, fullModuleName, imageTag required", 400);
+              return;
+            }
+            const data = await handler.triggerDeploy(pipelineName, fullModuleName, imageTag, {
+              ksPipelineType,
+              includeCanaryDeployHeader,
+            });
+            sendJson(res, data);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.post("/api/release/batch-deploy", releaseAuthMiddleware, (req, res) => {
+        void (async () => {
+          try {
+            const data = await handler.batchDeploy(req.body);
+            sendJson(res, data);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.get("/api/release/canary/:pipeline", releaseAuthMiddleware, (req, res) => {
+        void (async () => {
+          try {
+            const data = await handler.getCanary(req.params.pipeline);
+            sendJson(res, data ?? null);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.post("/api/release/canary/:pipeline/shift", releaseAuthMiddleware, (req, res) => {
+        void (async () => {
+          try {
+            const { weights, meta } = req.body as {
+              weights: Record<string, number>;
+              meta?: Record<string, unknown>;
+            };
+            if (!weights) {
+              err(res, "BAD_REQUEST", "weights required", 400);
+              return;
+            }
+            const data = await handler.shiftTraffic(req.params.pipeline, weights, meta);
+            if (data.status !== "applied") {
+              res.status(400).json({
+                code: "TRAFFIC_SHIFT_REJECTED",
+                message: data.message ?? "切流未生效",
+                detail: data,
+              });
+              return;
+            }
+            sendJson(res, data);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.get(
+        "/api/release/canary-switch-precheck/:pipeline",
+        releaseAuthMiddleware,
+        (req, res) => {
+          void (async () => {
+            try {
+              const data = await handler.preCheckCanarySwitch(req.params.pipeline);
+              sendJson(res, data);
+            } catch (e) {
+              err(res, "RELEASE_ERROR", String(e), 500);
+            }
+          })();
+        },
+      );
+
+      app.post("/api/release/pipeline-input", releaseAuthMiddleware, (req, res) => {
+        void (async () => {
+          try {
+            const { pipelineName, runId, nodeId, stepId, inputId, abort, jenkinsBuildId } = req.body as {
+              pipelineName?: string;
+              runId?: string;
+              nodeId?: string;
+              stepId?: string;
+              inputId?: string;
+              abort?: boolean;
+              jenkinsBuildId?: string;
+            };
+            if (!pipelineName || !runId || !nodeId || !stepId || !inputId) {
+              err(res, "BAD_REQUEST", "pipelineName, runId, nodeId, stepId, inputId required", 400);
+              return;
+            }
+            await handler.submitPipelineRunInput(
+              pipelineName,
+              runId,
+              nodeId,
+              stepId,
+              inputId,
+              Boolean(abort),
+              typeof jenkinsBuildId === "string" ? jenkinsBuildId : undefined,
+            );
+            sendJson(res, { ok: true });
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.post("/api/release/batch-traffic-shift", releaseAuthMiddleware, (req, res) => {
+        void (async () => {
+          try {
+            const data = await handler.batchTrafficShift(req.body);
+            sendJson(res, data);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+
+      app.get("/api/release/traffic-logs/:pipeline", releaseAuthMiddleware, (req, res) => {
+        void (async () => {
+          try {
+            const data = await handler.getTrafficLogs(req.params.pipeline);
+            sendJson(res, data);
+          } catch (e) {
+            err(res, "RELEASE_ERROR", String(e), 500);
+          }
+        })();
+      });
+    }
+
+    // ──────────── End release routes ────────────
 
     if (this.webviewDist && fs.existsSync(this.webviewDist)) {
       app.use(express.static(this.webviewDist));
