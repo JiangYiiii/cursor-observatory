@@ -238,17 +238,3 @@ cd webview-ui && npm run dev
 ## 许可
 
 MIT
-
-
-```
-# 启动命令
-cd webview-ui && npm install && npm run build
-cd ../extension && npm install && npm run build && npm run package
-```
-
-
-```
-cd /extension
-export OVSX_PAT="$(tr -d '\n' < ../cursor-observatory-token.txt)"
-npx ovsx publish cursor-observatory-0.1.1.vsix -p "$OVSX_PAT"
-```
