@@ -1,4 +1,11 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useCallback, useState } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Folder,
+  FolderOpen,
+} from "lucide-react";
 import type { DocsTreeNode } from "@/types/observatory";
 
 type Props = {
@@ -7,7 +14,85 @@ type Props = {
   onSelectFile: (relativePath: string) => void;
 };
 
-function TreeRows({
+function DirNode({
+  node,
+  depth,
+  selectedPath,
+  onSelectFile,
+  defaultOpen,
+}: {
+  node: DocsTreeNode;
+  depth: number;
+  selectedPath: string | null;
+  onSelectFile: (relativePath: string) => void;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const toggle = useCallback(() => setOpen((o) => !o), []);
+
+  return (
+    <div className="min-w-0">
+      <button
+        type="button"
+        className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800/60"
+        style={{ paddingLeft: 8 + depth * 14 }}
+        onClick={toggle}
+      >
+        {open ? (
+          <ChevronDown className="size-3 shrink-0 opacity-60" />
+        ) : (
+          <ChevronRight className="size-3 shrink-0 opacity-60" />
+        )}
+        {open ? (
+          <FolderOpen className="size-3.5 shrink-0 text-yellow-500" />
+        ) : (
+          <Folder className="size-3.5 shrink-0 text-yellow-500" />
+        )}
+        <span className="truncate">{node.name}</span>
+      </button>
+      {open &&
+        node.children?.map((c) => (
+          <TreeItem
+            key={`${c.type}:${c.relativePath}:${c.name}`}
+            node={c}
+            depth={depth + 1}
+            selectedPath={selectedPath}
+            onSelectFile={onSelectFile}
+          />
+        ))}
+    </div>
+  );
+}
+
+function FileNode({
+  node,
+  depth,
+  selected,
+  onSelectFile,
+}: {
+  node: DocsTreeNode;
+  depth: number;
+  selected: boolean;
+  onSelectFile: (relativePath: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`flex w-full items-center gap-1.5 truncate rounded px-2 py-1 text-left text-sm ${
+        selected
+          ? "bg-blue-100 font-medium text-blue-900 dark:bg-blue-950/50 dark:text-blue-300"
+          : "text-zinc-800 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800/60"
+      }`}
+      style={{ paddingLeft: 8 + depth * 14 + 14 }}
+      onClick={() => onSelectFile(node.relativePath)}
+    >
+      <FileText className="size-3.5 shrink-0 text-zinc-500" />
+      <span className="truncate">{node.name}</span>
+    </button>
+  );
+}
+
+function TreeItem({
   node,
   depth,
   selectedPath,
@@ -22,7 +107,7 @@ function TreeRows({
     return (
       <>
         {node.children.map((c) => (
-          <TreeRows
+          <TreeItem
             key={`${c.type}:${c.relativePath}:${c.name}`}
             node={c}
             depth={depth}
@@ -35,48 +120,40 @@ function TreeRows({
   }
 
   if (node.type === "file") {
-    const active = selectedPath === node.relativePath;
     return (
-      <button
-        type="button"
-        className={`block w-full truncate rounded px-2 py-1 text-left text-sm ${
-          active
-            ? "bg-zinc-200 font-medium dark:bg-zinc-700"
-            : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
-        }`}
-        style={{ paddingLeft: 8 + depth * 12 }}
-        onClick={() => onSelectFile(node.relativePath)}
-      >
-        {node.name}
-      </button>
+      <FileNode
+        node={node}
+        depth={depth}
+        selected={selectedPath === node.relativePath}
+        onSelectFile={onSelectFile}
+      />
     );
   }
 
+  const hasSelectedChild = selectedPath
+    ? isAncestor(node, selectedPath)
+    : false;
+
   return (
-    <div className="min-w-0">
-      <div
-        className="truncate px-2 py-0.5 text-xs font-medium text-zinc-500 dark:text-zinc-400"
-        style={{ paddingLeft: 8 + depth * 12 }}
-      >
-        {node.name}
-      </div>
-      {node.children?.map((c) => (
-        <TreeRows
-          key={`${c.type}:${c.relativePath}:${c.name}`}
-          node={c}
-          depth={depth + 1}
-          selectedPath={selectedPath}
-          onSelectFile={onSelectFile}
-        />
-      ))}
-    </div>
+    <DirNode
+      node={node}
+      depth={depth}
+      selectedPath={selectedPath}
+      onSelectFile={onSelectFile}
+      defaultOpen={depth < 1 || hasSelectedChild}
+    />
   );
+}
+
+function isAncestor(node: DocsTreeNode, path: string): boolean {
+  if (node.type === "file") return node.relativePath === path;
+  return node.children?.some((c) => isAncestor(c, path)) ?? false;
 }
 
 export function DocsTreeView({ root, selectedPath, onSelectFile }: Props) {
   return (
-    <div className="max-h-[min(70vh,520px)] overflow-y-auto rounded border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950">
-      <TreeRows
+    <div className="overflow-y-auto">
+      <TreeItem
         node={root}
         depth={0}
         selectedPath={selectedPath}

@@ -734,7 +734,23 @@ export const useReleaseStore = create<ReleaseState>((set, get) => {
       set((s) => ({ loading: { ...s.loading, shifting: true }, errors: { ...s.errors, shift: null } }));
       try {
         const ds = getDataSource();
-        await ds.shiftReleaseTraffic(pipeline, weights);
+        const { pipelines: allPipelines, canaryStates } = get();
+        const pInfo = allPipelines.find((p) => p.name === pipeline);
+        const cs = canaryStates[pipeline];
+        const meta = cs
+          ? {
+              devopsProject: "",
+              module: pInfo?.moduleName ?? "",
+              env: "prod",
+              blueVersion: cs.blueVersion ?? "",
+              greenVersion: cs.greenVersion ?? "",
+              pipelineRunId: "",
+              jenkinsBuildId: "",
+              beforeBlue: cs.blueWeight ?? 0,
+              beforeGreen: cs.greenWeight ?? 0,
+            }
+          : undefined;
+        await ds.shiftReleaseTraffic(pipeline, weights, meta);
         const canary = await ds.getReleaseCanary(pipeline);
         if (canary) {
           set((s) => ({

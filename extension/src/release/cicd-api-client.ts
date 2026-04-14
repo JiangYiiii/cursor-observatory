@@ -529,12 +529,20 @@ export class CicdApiClient {
   private parsePipelineRunRecord(run: Record<string, unknown>): PipelineRunSummary {
     const meta = run.metadata as Record<string, unknown> | undefined;
     const st = run.status as Record<string, unknown> | undefined;
+    const spec = run.spec as Record<string, unknown> | undefined;
     const annotations = meta?.annotations as Record<string, unknown> | undefined;
+    const labels = meta?.labels as Record<string, unknown> | undefined;
     const runName = String(meta?.name ?? run.name ?? run.id ?? "").trim();
+
     const buildFromAnnotations =
       typeof annotations?.["devops.kubesphere.io/jenkins-build"] === "string"
         ? String(annotations["devops.kubesphere.io/jenkins-build"]).trim()
         : "";
+    const buildFromLabels =
+      typeof labels?.["devops.kubesphere.io/jenkins-build"] === "string"
+        ? String(labels["devops.kubesphere.io/jenkins-build"]).trim()
+        : "";
+
     const rawStatus = String(
       run.phase ?? st?.phase ?? run.result ?? st?.result ?? "unknown",
     ).toLowerCase();
@@ -551,8 +559,17 @@ export class CicdApiClient {
     };
 
     const jenkinsBuildId = String(
-      run.buildId ?? st?.buildId ?? buildFromAnnotations ?? "",
+      run.buildId ?? st?.buildId ?? spec?.buildId
+        ?? buildFromAnnotations ?? buildFromLabels ?? "",
     ).trim();
+
+    if (!jenkinsBuildId) {
+      console.warn(
+        `[Observatory] parsePipelineRunRecord: jenkinsBuildId 为空，runName=${runName}，` +
+        `已检查字段: run.buildId=${run.buildId}, status.buildId=${st?.buildId}, ` +
+        `spec.buildId=${spec?.buildId}, annotation=${buildFromAnnotations}, label=${buildFromLabels}`,
+      );
+    }
 
     return {
       id: runName,
@@ -679,6 +696,39 @@ export class CicdApiClient {
     throw lastErr instanceof Error
       ? lastErr
       : new Error("SubmitInputStep：所有 run/路径组合均失败");
+  }
+
+  /**
+   * 通过 v1alpha2（Jenkins wrapper）列出 pipeline runs，按 runName 匹配出数字 build ID。
+   * v1alpha2 返回的 run 对象天然包含数字 `id` 字段。
+   */
+  async getJenkinsBuildIdViaV2(pipelineName: string, runName: string): Promise<string | null> {
+    const enc = encodeURIComponent;
+    const ns = enc(this.defaultNamespace);
+    const pl = enc(pipelineName);
+
+    const pathVariants = [
+      `/devops/${ns}/pipelines/${pl}/runs/`,
+      `/namespaces/${ns}/pipelines/${pl}/runs/`,
+    ];
+
+    for (const path of pathVariants) {
+      const url = this.ksDevopsV2Url(path);
+      try {
+        const data = await this.request<Array<Record<string, unknown>>>("GET", url);
+        const runs = Array.isArray(data) ? data : [];
+        for (const r of runs) {
+          const name = String(r.name ?? r.pipeline ?? "").trim();
+          const id = String(r.id ?? "").trim();
+          if (name === runName && /^\d+$/.test(id)) {
+            return id;
+          }
+        }
+      } catch {
+        /* try next path variant */
+      }
+    }
+    return null;
   }
 
   async getLatestPipelineRun(pipelineName: string): Promise<PipelineRunSummary | null> {

@@ -27,6 +27,3 @@ webview-ui/dist/
 # SDD 每特性本地 Observatory 产物（测试报告等，仅本机）
 specs/**/observatory/
 
-# Observatory (auto)
-.observatory/
-**/.observatory/

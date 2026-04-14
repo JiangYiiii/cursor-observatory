@@ -3,7 +3,6 @@
  * primary_doc: docs/RELEASE_WORKFLOW_DESIGN.md §5, §6, §9, §10
  */
 import * as vscode from "vscode";
-import * as fs from "node:fs";
 import { CicdApiClient } from "./cicd-api-client";
 import {
   PipelineInfo,
@@ -376,6 +375,15 @@ export class ReleaseHandler {
       const latest = await client.getLatestPipelineRun(pipelineName);
       pathRunId = latest?.jenkinsBuildId?.trim();
     }
+    if (!pathRunId) {
+      pathRunId = (await client.getJenkinsBuildIdViaV2(pipelineName, runId)) ?? undefined;
+    }
+    if (!pathRunId) {
+      console.warn(
+        `[Observatory] submitPipelineRunInput: 无法解析 jenkinsBuildId，` +
+        `pipeline=${pipelineName}, runId=${runId}，将用 runName 尝试`,
+      );
+    }
     await client.submitPipelineRunInput(
       pipelineName,
       runId,
@@ -504,16 +512,45 @@ export class ReleaseHandler {
 
   // ──────────── Canary / traffic operations ────────────
 
+  /**
+   * 先尝试 `java-` 前缀，未命中再回退为 moduleName（显式 `pipelineMetadataMap.deploymentName` 优先）。
+   */
+  private async resolveDeploymentName(
+    client: CicdApiClient,
+    namespace: string,
+    cluster: string,
+    pipeline: string,
+  ): Promise<string> {
+    const cfg = this.getConfig();
+    const meta = cfg.pipelineMetadataMap[pipeline];
+
+    if (meta?.deploymentName) {
+      return meta.deploymentName;
+    }
+
+    const parsed = parsePipelineName(pipeline);
+    const withPrefix = `java-${parsed.moduleName}`;
+    const withoutPrefix = parsed.moduleName;
+
+    const hit = await client.getCanaryDeployment(namespace, withPrefix, cluster);
+    if (hit) {
+      return withPrefix;
+    }
+
+    return withoutPrefix;
+  }
+
   async getCanary(pipeline: string): Promise<CanaryDeployment | null> {
     const client = await this.createClient();
     const cfg = this.getConfig();
-
-    const metaMap = cfg.pipelineMetadataMap;
-    const meta = metaMap[pipeline];
-    const parsed = parsePipelineName(pipeline);
-
-    const deploymentName = meta?.deploymentName ?? `java-${parsed.moduleName}`;
     const namespace = cfg.workspace;
+
+    const deploymentName = await this.resolveDeploymentName(
+      client,
+      namespace,
+      cfg.cluster,
+      pipeline,
+    );
 
     return client.getCanaryDeployment(namespace, deploymentName, cfg.cluster);
   }
@@ -537,18 +574,17 @@ export class ReleaseHandler {
     const client = await this.createClient();
     const cfg = this.getConfig();
 
-    // #region agent log
-    const _dbgLog = (msg: string, data: Record<string, unknown>) => { try { fs.appendFileSync("/Users/jiangyi/Documents/codedev/cursor_vibe_coding/.cursor/debug-c32067.log", JSON.stringify({ sessionId: "c32067", location: "release-handler.ts:shiftTraffic", message: msg, data, timestamp: Date.now() }) + "\n"); } catch {} };
-    _dbgLog("shiftTraffic-entry", { pipeline, weights, meta, hypothesisId: "H1" });
-    // #endregion
-
-    const metaMap = cfg.pipelineMetadataMap;
-    const pMeta = metaMap[pipeline];
+    const pMeta = cfg.pipelineMetadataMap[pipeline];
     const parsed = parsePipelineName(pipeline);
-
-    const deploymentName = pMeta?.deploymentName ?? `java-${parsed.moduleName}`;
     const namespace = cfg.workspace;
     const moduleName = pMeta?.moduleName ?? parsed.moduleName;
+
+    const deploymentName = await this.resolveDeploymentName(
+      client,
+      namespace,
+      cfg.cluster,
+      pipeline,
+    );
 
     try {
       const pre = await client.preCheckCanarySwitchStatus(cfg.devopsProject, pipeline, cfg.cluster);
@@ -583,10 +619,6 @@ export class ReleaseHandler {
         const versions = Object.keys(weights);
         const blueVersion = meta.blueVersion ?? versions[0] ?? "";
         const greenVersion = meta.greenVersion ?? versions[1] ?? "";
-
-        // #region agent log
-        _dbgLog("uploadTrafficChangeEvent-payload", { blueVersion, greenVersion, blueValue: weights[blueVersion] ?? 0, greenValue: weights[greenVersion] ?? 0, beforeBlue: meta.beforeBlue, beforeGreen: meta.beforeGreen, weightsSum: Object.values(weights).reduce((a, b) => a + b, 0), hypothesisId: "H1" });
-        // #endregion
 
         await client.uploadTrafficChangeEvent({
           devopsProject: meta.devopsProject ?? cfg.devopsProject,

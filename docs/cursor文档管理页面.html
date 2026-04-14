@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Cursor Doc Manager - 2026</title>
+<script src="https://modao.cc/agent-py/static/source/js/tailwindcss.3.4.3.js"></script>
+<script src="https://modao.cc/agent-py/static/source/js/iconify-icon.min.1.0.7.js"></script>
+<script src="https://modao.cc/agent-py/static/source/js/echarts.min.5.4.3.js"></script>
+<style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        /*
+         * 与 extension webview-ui（MainLayout）暗色面板一致：
+         * 主区 #1e1e2e、侧栏/顶栏 #252536、边框 zinc-700
+         * 在 VS Code Webview 内打开时可继承 --vscode-*（若存在）
+         */
+        :root {
+            --doc-bg: var(--vscode-editor-background, #1e1e2e);
+            --doc-side: var(--vscode-sideBar-background, #252536);
+            --doc-panel: var(--vscode-panel-background, #1e1e2e);
+            --doc-header: var(--vscode-titleBar-activeBackground, #252536);
+            --doc-border: var(--vscode-panel-border, #3f3f46);
+            --doc-fg: var(--vscode-foreground, #e4e4e7);
+            --doc-muted: var(--vscode-descriptionForeground, #a1a1aa);
+            --doc-hover: rgba(39, 39, 42, 0.85);
+            --doc-active-bg: rgba(23, 37, 84, 0.45);
+            --doc-active-fg: #93c5fd;
+            --doc-code-bg: #2a2a3c;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--doc-bg);
+            color: var(--doc-fg);
+            overflow: hidden;
+        }
+
+        .vscode-border { border-color: var(--doc-border); }
+        .vscode-bg-side { background-color: var(--doc-side); }
+        .vscode-bg-main { background-color: var(--doc-panel); }
+        .vscode-bg-header { background-color: var(--doc-header); }
+        .vscode-active {
+            background-color: var(--doc-active-bg);
+            color: var(--doc-active-fg);
+        }
+        .vscode-hover:hover { background-color: var(--doc-hover); }
+        .vscode-text-blue { color: var(--doc-active-fg); }
+        .vscode-accent {
+            background-color: var(--doc-side);
+            color: var(--doc-muted);
+            border-top: 1px solid var(--doc-border);
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #52525b; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #71717a; }
+
+        .markdown-content h1 { font-size: 1.5rem; font-weight: 700; color: var(--doc-fg); margin-bottom: 1rem; }
+        .markdown-content h2 { font-size: 1.25rem; font-weight: 600; color: #d4d4d8; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+        .markdown-content p { margin-bottom: 1rem; line-height: 1.6; color: #d4d4d8; }
+        .markdown-content code { font-family: 'JetBrains Mono', monospace; background: var(--doc-code-bg); padding: 2px 4px; border-radius: 4px; color: #fca5a5; }
+        .markdown-content pre { background: var(--doc-code-bg); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; overflow-x: auto; border: 1px solid var(--doc-border); }
+
+        /* Fullscreen Panel Styles */
+        #right-panel.fullscreen-mode {
+            position: fixed !important;
+            top: 0;
+            left: 0;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 1000;
+            background-color: var(--doc-panel);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .fullscreen-mode .markdown-content {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+        
+        .fullscreen-mode #panel-info {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+<!-- Top Activity Bar (Simulated) -->
+<header class="h-10 vscode-bg-header vscode-border border-b flex items-center justify-between px-4 z-50">
+<div class="flex items-center space-x-4">
+<div class="flex items-center space-x-2">
+<iconify-icon class="text-xl" icon="logos:cursor"></iconify-icon>
+<span class="text-xs font-medium text-zinc-400">文档管理器</span>
+</div>
+<div class="h-4 w-[1px] bg-zinc-600"></div>
+<nav class="flex space-x-3 text-xs">
+</nav>
+</div>
+<div class="flex items-center space-x-3">
+<span class="text-[10px] text-zinc-500">最后同步: 2026-04-13 14:30:22</span>
+<button class="p-1 rounded hover:bg-zinc-700/80"><iconify-icon icon="codicon:refresh"></iconify-icon></button>
+<button class="p-1 rounded hover:bg-zinc-700/80"><iconify-icon icon="codicon:settings-gear"></iconify-icon></button>
+</div>
+</header>
+<main class="flex-1 flex overflow-hidden min-h-0">
+<!-- Left Column: Navigation & Tags -->
+<aside class="w-64 shrink-0 vscode-bg-side vscode-border border-r flex flex-col">
+<!-- Project Tree -->
+<div class="flex-1 overflow-y-auto">
+<div class="p-3 text-[11px] uppercase tracking-wider font-bold text-zinc-500 flex justify-between items-center">
+<span>工作区目录</span>
+<iconify-icon class="cursor-pointer hover:text-white" icon="codicon:new-folder"></iconify-icon>
+</div>
+<ul class="text-sm">
+<li class="px-4 py-1 flex items-center space-x-2 vscode-hover cursor-pointer">
+<iconify-icon class="text-xs" icon="codicon:chevron-down"></iconify-icon>
+<iconify-icon class="text-yellow-500" icon="codicon:folder"></iconify-icon>
+<span>docs</span>
+</li>
+<li class="pl-10 pr-4 py-1 flex items-center space-x-2 vscode-hover cursor-pointer group">
+<iconify-icon class="text-base" icon="vscode-icons:file-type-markdown"></iconify-icon>
+<span class="truncate">api_documentation.md</span>
+</li>
+<li class="pl-10 pr-4 py-1 flex items-center space-x-2 vscode-active cursor-pointer">
+<iconify-icon class="text-base" icon="vscode-icons:file-type-markdown"></iconify-icon>
+<span class="truncate">system_architecture.md</span>
+</li>
+<li class="px-4 py-1 flex items-center space-x-2 vscode-hover cursor-pointer">
+<iconify-icon class="text-xs" icon="codicon:chevron-right"></iconify-icon>
+<iconify-icon class="text-yellow-500" icon="codicon:folder"></iconify-icon>
+<span>notes</span>
+</li>
+<li class="px-4 py-1 flex items-center space-x-2 vscode-hover cursor-pointer">
+<iconify-icon class="text-xs" icon="codicon:chevron-right"></iconify-icon>
+<iconify-icon class="text-yellow-500" icon="codicon:folder"></iconify-icon>
+<span>archives</span>
+</li>
+</ul>
+<!-- Tag Management -->
+<div class="mt-6 p-3 text-[11px] uppercase tracking-wider font-bold text-zinc-500">
+<span>标签筛选</span>
+</div>
+<div class="px-4 space-y-2">
+<div class="flex flex-wrap gap-2">
+<span class="px-2 py-0.5 rounded-full text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 cursor-pointer hover:bg-blue-500/40">#开发规范 (12)</span>
+<span class="px-2 py-0.5 rounded-full text-[10px] bg-green-500/20 text-green-400 border border-green-500/30 cursor-pointer hover:bg-green-500/40">#前端 (8)</span>
+<span class="px-2 py-0.5 rounded-full text-[10px] bg-purple-500/20 text-purple-400 border border-purple-500/30 cursor-pointer hover:bg-purple-500/40">#架构 (5)</span>
+<span class="px-2 py-0.5 rounded-full text-[10px] bg-orange-500/20 text-orange-400 border border-orange-500/30 cursor-pointer hover:bg-orange-500/40">#API (14)</span>
+<span class="px-2 py-0.5 rounded-full text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 cursor-pointer hover:bg-red-500/40">#待完善 (3)</span>
+</div>
+</div>
+<!-- Favorites -->
+<ul class="text-sm">
+</ul>
+</div>
+</aside>
+<!-- Middle Column: Document List (占位时可在此插入) -->
+<!-- Right Column: Preview & Graph — flex-1 占满侧栏右侧全部剩余空间 -->
+<aside class="flex-1 min-w-0 vscode-bg-main vscode-border border-l flex flex-col transition-all duration-300" id="right-panel">
+<!-- Right Tabs -->
+<div class="h-9 vscode-bg-header vscode-border border-b flex items-center px-2 justify-between" style="opacity: 1;">
+<div class="flex h-full">
+<button class="px-4 h-full text-xs flex items-center space-x-1 vscode-hover text-zinc-400" id="btn-preview" onclick="switchRightPanel('preview')">
+<iconify-icon icon="codicon:markdown"></iconify-icon>
+<span class="">实时预览</span>
+</button>
+<button class="px-4 h-full text-xs flex items-center space-x-1 vscode-hover text-zinc-400" id="btn-graph" onclick="switchRightPanel('graph')">
+<iconify-icon icon="codicon:hubot"></iconify-icon>
+<span>关系图谱</span>
+</button>
+<button class="px-4 h-full text-xs flex items-center space-x-1 vscode-active border-t-2 border-blue-400" id="btn-info" onclick="switchRightPanel('info')">
+<iconify-icon icon="codicon:info"></iconify-icon>
+<span class="">元数据</span>
+</button>
+</div>
+<button class="p-1 rounded text-zinc-400 hover:bg-zinc-700/80" id="btn-fullscreen" onclick="toggleFullScreen()" title="全屏查看">
+<iconify-icon class="text-base" icon="codicon:screen-full" id="fullscreen-icon"></iconify-icon>
+</button>
+</div>
+<!-- Preview Content -->
+<div class="flex-1 min-h-0 overflow-y-auto p-6 markdown-content hidden" id="panel-preview" style="opacity: 1;">
+<h1 class="">系统架构概览 v2.4</h1>
+<p>本文件描述了 Cursor 2026 版本的核心后端架构。系统采用 <strong>微内核架构</strong>，允许通过 WASM 插件进行扩展。</p>
+<h2>核心组件</h2>
+<ul>
+<li><strong>Context Engine</strong>: 负责实时分析代码语义。</li>
+<li class=""><strong>Indexer</strong>: 毫秒级的全文检索引擎。</li>
+<li><strong>Manager</strong>: 本文档管理器所在的核心模块。</li>
+</ul>
+<h2>代码规范</h2>
+<pre><code>// 示例：引用一个内部 API
+const doc = await manager.getDocument('uuid-123');
+console.log(doc.metadata.tags);</code></pre>
+<div class="mt-8 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+<div class="flex items-center space-x-2 text-blue-400 text-sm font-bold mb-2">
+<iconify-icon icon="codicon:info"></iconify-icon>
+<span>关联引用</span>
+</div>
+<ul class="text-xs space-y-1 text-blue-300/80">
+<li class="hover:underline cursor-pointer">[[api_documentation]]</li>
+<li class="hover:underline cursor-pointer">[[security_policy]]</li>
+</ul>
+</div>
+</div>
+<!-- Graph Content -->
+<div class="flex-1 min-h-0 flex flex-col hidden" id="panel-graph">
+<div class="flex-1 min-h-0" id="relationshipGraph"></div>
+<div class="p-3 vscode-bg-header text-[10px] text-zinc-500 border-t vscode-border">
+                    使用滚轮缩放，拖动节点调整布局。蓝色节点代表当前文档。
+                </div>
+</div>
+<!-- Metadata Content -->
+<div class="flex-1 min-h-0 overflow-y-auto p-4 space-y-6" id="panel-info">
+<div>
+<h3 class="text-xs font-bold text-zinc-500 uppercase mb-3">基础信息</h3>
+<div class="space-y-3 text-sm">
+<div class="flex justify-between">
+<span class="text-zinc-500">文件名</span>
+<span class="text-zinc-200">system_architecture.md</span>
+</div>
+<div class="flex justify-between">
+<span class="text-zinc-500">文件大小</span>
+<span class="text-zinc-200">42.5 KB</span>
+</div>
+<div class="flex justify-between">
+<span class="text-zinc-500">创建者</span>
+<span class="text-zinc-200">AI-Assistant</span>
+</div>
+</div>
+</div>
+<div>
+<h3 class="text-xs font-bold text-zinc-500 uppercase mb-3">标签管理</h3>
+<div class="flex flex-wrap gap-2 mb-3" id="metaTags">
+<span class="group flex items-center space-x-1 px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30">
+<span>#架构</span>
+<iconify-icon class="cursor-pointer hover:text-white" icon="codicon:close"></iconify-icon>
+</span>
+<span class="group flex items-center space-x-1 px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+<span>#开发规范</span>
+<iconify-icon class="cursor-pointer hover:text-white" icon="codicon:close"></iconify-icon>
+</span>
+</div>
+<div class="relative">
+<input class="w-full rounded border border-zinc-600 bg-[#1e1e2e] px-3 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:border-blue-500 focus:outline-none" placeholder="添加标签..." type="text"/>
+</div>
+</div>
+<div class="">
+<h3 class="text-xs font-bold text-zinc-500 uppercase mb-3">快捷操作</h3><div class="grid grid-cols-2 gap-2" style="opacity: 1;">
+<button class="flex items-center justify-center space-x-2 rounded border border-zinc-600 bg-zinc-800/80 p-2 text-xs text-zinc-200 transition-colors hover:bg-zinc-700" style="border-radius: 5px;">
+<iconify-icon icon="codicon:copy"></iconify-icon>
+<span>复制路径</span>
+</button>
+<button class="flex items-center justify-center space-x-2 p-2 rounded bg-red-900/20 hover:bg-red-900/40 text-red-400 text-xs transition-colors" style="border-radius: 5px;">
+<iconify-icon icon="codicon:trash"></iconify-icon>
+<span>彻底删除</span>
+</button>
+</div>
+</div>
+</div>
+</aside>
+</main>
+<!-- Bottom Status Bar -->
+<footer class="h-6 vscode-accent flex items-center justify-between px-3 text-[11px]">
+<div class="flex items-center space-x-4">
+<div class="flex cursor-pointer items-center space-x-1 rounded px-1 hover:bg-zinc-700/60">
+<iconify-icon icon="codicon:remote"></iconify-icon>
+<span>SSH: cursor-prod-01</span>
+</div>
+<div class="flex cursor-pointer items-center space-x-1 rounded px-1 hover:bg-zinc-700/60">
+<iconify-icon icon="codicon:git-branch"></iconify-icon>
+<span>main*</span>
+</div>
+</div>
+<div class="flex items-center space-x-4">
+<span>UTF-8</span>
+<span>Markdown</span>
+<div class="flex items-center space-x-1">
+<iconify-icon icon="codicon:feedback"></iconify-icon>
+<iconify-icon icon="codicon:bell"></iconify-icon>
+</div>
+</div>
+</footer>
+<script>
+        // Init ECharts Graph
+        let graphChart = null;
+
+        function initGraph() {
+            if (graphChart) return;
+            const chartDom = document.getElementById('relationshipGraph');
+            graphChart = echarts.init(chartDom, 'dark');
+            const option = {
+                backgroundColor: 'transparent',
+                tooltip: {},
+                series: [{
+                    type: 'graph',
+                    layout: 'force',
+                    symbolSize: 40,
+                    roam: true,
+                    label: { show: true, fontSize: 10, color: '#d4d4d8' },
+                    edgeSymbol: ['circle', 'arrow'],
+                    edgeSymbolSize: [4, 8],
+                    force: { repulsion: 200, edgeLength: 100 },
+                    draggable: true,
+                    data: [
+                        { name: 'system_architecture.md', symbolSize: 60, itemStyle: { color: '#60a5fa' } },
+                        { name: 'api_documentation.md', itemStyle: { color: '#e67e22' } },
+                        { name: 'security_policy.md', itemStyle: { color: '#c0392b' } },
+                        { name: 'database_schema.md', itemStyle: { color: '#c0392b' } },
+                        { name: 'frontend_conventions.md', itemStyle: { color: '#27ae60' } },
+                        { name: 'deployment_guide.md', itemStyle: { color: '#2980b9' } },
+                        { name: 'v2_roadmap.md', itemStyle: { color: '#8e44ad' } }
+                    ],
+                    links: [
+                        { source: 'system_architecture.md', target: 'api_documentation.md' },
+                        { source: 'system_architecture.md', target: 'security_policy.md' },
+                        { source: 'system_architecture.md', target: 'database_schema.md' },
+                        { source: 'api_documentation.md', target: 'frontend_conventions.md' },
+                        { source: 'deployment_guide.md', target: 'system_architecture.md' },
+                        { source: 'v2_roadmap.md', target: 'system_architecture.md' }
+                    ],
+                    lineStyle: { opacity: 0.9, width: 1, curveness: 0.1 }
+                }]
+            };
+            graphChart.setOption(option);
+            window.addEventListener('resize', () => graphChart && graphChart.resize());
+        }
+
+        // Switch Right Panel Logic
+        function switchRightPanel(type) {
+            // Panels
+            document.getElementById('panel-preview').classList.add('hidden');
+            document.getElementById('panel-graph').classList.add('hidden');
+            document.getElementById('panel-info').classList.add('hidden');
+            document.getElementById(`panel-${type}`).classList.remove('hidden');
+
+            // Buttons
+            const btns = ['preview', 'graph', 'info'];
+            btns.forEach(b => {
+                const el = document.getElementById(`btn-${b}`);
+                el.classList.remove('vscode-active', 'border-t-2', 'border-blue-400', 'text-blue-100');
+                el.classList.add('vscode-hover', 'text-zinc-400');
+            });
+
+            const activeBtn = document.getElementById(`btn-${type}`);
+            activeBtn.classList.add('vscode-active', 'border-t-2', 'border-blue-400', 'text-blue-100');
+            activeBtn.classList.remove('vscode-hover', 'text-zinc-400');
+
+            if (type === 'graph') {
+                setTimeout(() => {
+                    initGraph();
+                    if (graphChart) {
+                        graphChart.resize();
+                    }
+                }, 50);
+            }
+        }
+
+        // Full Screen Toggle
+        function toggleFullScreen() {
+            const panel = document.getElementById('right-panel');
+            const icon = document.getElementById('fullscreen-icon');
+            const isFullScreen = panel.classList.toggle('fullscreen-mode');
+            
+            if (isFullScreen) {
+                icon.setAttribute('icon', 'codicon:screen-normal');
+                // Hide main navigation temporarily for cleaner view? 
+                // In this implementation, position fixed handles it.
+            } else {
+                icon.setAttribute('icon', 'codicon:screen-full');
+            }
+            
+            // Handle graph resize
+            if (graphChart) {
+                // Resize multiple times during transition for smoothness
+                let count = 0;
+                const resizeInterval = setInterval(() => {
+                    graphChart.resize();
+                    count++;
+                    if (count > 10) clearInterval(resizeInterval);
+                }, 30);
+            }
+        }
+
+        // Exit full screen with Esc
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const panel = document.getElementById('right-panel');
+                if (panel.classList.contains('fullscreen-mode')) {
+                    toggleFullScreen();
+                }
+            }
+        });
+
+        // Search / 表格批量操作（仅当页面中存在对应 DOM 时绑定，避免控制台报错）
+        (function bindDocTableHelpers() {
+            const searchInput = document.getElementById('docSearch');
+            const tableBody = document.getElementById('docTableBody');
+            const noResults = document.getElementById('noResults');
+            if (searchInput && tableBody && noResults) {
+                searchInput.addEventListener('input', (e) => {
+                    const val = e.target.value.toLowerCase();
+                    const rows = tableBody.getElementsByTagName('tr');
+                    let found = 0;
+                    for (let row of rows) {
+                        const text = row.innerText.toLowerCase();
+                        if (text.includes(val)) {
+                            row.classList.remove('hidden');
+                            found++;
+                        } else {
+                            row.classList.add('hidden');
+                        }
+                    }
+                    if (found === 0) {
+                        noResults.classList.remove('hidden');
+                        tableBody.classList.add('hidden');
+                    } else {
+                        noResults.classList.add('hidden');
+                        tableBody.classList.remove('hidden');
+                    }
+                });
+            }
+
+            const selectAll = document.getElementById('selectAll');
+            const bulkBtn = document.getElementById('bulkActionBtn');
+            const checkboxes = document.querySelectorAll('.doc-checkbox');
+            function updateBulkBtn() {
+                if (!bulkBtn) return;
+                const checkedCount = document.querySelectorAll('.doc-checkbox:checked').length;
+                bulkBtn.disabled = checkedCount === 0;
+                if (checkedCount > 0) {
+                    bulkBtn.innerHTML = `<iconify-icon icon="codicon:files"></iconify-icon><span>批量操作 (${checkedCount})</span><iconify-icon icon="codicon:chevron-down"></iconify-icon>`;
+                } else {
+                    bulkBtn.innerHTML = `<iconify-icon icon="codicon:files"></iconify-icon><span>批量操作</span><iconify-icon icon="codicon:chevron-down"></iconify-icon>`;
+                }
+            }
+            if (selectAll && bulkBtn && checkboxes.length) {
+                selectAll.addEventListener('change', (e) => {
+                    checkboxes.forEach(cb => {
+                        cb.checked = e.target.checked;
+                        const row = cb.closest('tr');
+                        if (e.target.checked) row.classList.add('bg-[#37373d]/30');
+                        else row.classList.remove('bg-[#37373d]/30');
+                    });
+                    updateBulkBtn();
+                });
+                checkboxes.forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        const row = cb.closest('tr');
+                        if (cb.checked) row.classList.add('bg-[#37373d]/30');
+                        else row.classList.remove('bg-[#37373d]/30');
+                        updateBulkBtn();
+                    });
+                });
+            }
+
+            if (tableBody) {
+                const rows = tableBody.getElementsByTagName('tr');
+                for (let row of rows) {
+                    row.addEventListener('click', (e) => {
+                        if (e.target.type === 'checkbox') return;
+                        for (let r of rows) r.classList.remove('bg-[#37373d]/50');
+                        row.classList.add('bg-[#37373d]/50');
+                    });
+                }
+            }
+        })();
+    </script>
+</body></html>
