@@ -2,7 +2,7 @@
   "name": "cursor-observatory",
   "displayName": "Cursor Observatory",
   "description": "AI 开发可观测：SDD 需求面板、影响分析/测试用例校验、泳道部署提示、能力阶段与 Agent 转录、数据模型引导、.observatory 数据层与仪表盘。AI dev observability: SDD requirement panel, impact analysis, deploy prompts, capability phases, transcripts, dashboard.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "cursor-observatory",
   "license": "MIT",
   "engines": {

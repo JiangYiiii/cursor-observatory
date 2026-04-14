@@ -167,7 +167,7 @@ class ObservatoryStore {
   "observatory": {
     "initialized_at": "2026-04-05T10:00:00Z",
     "last_full_scan": "2026-04-05T14:30:00Z",
-    "extension_version": "0.1.1",
+    "extension_version": "0.1.2",
     "scanners_used": ["python", "sql", "git", "doc", "ai-doc-index"]
   },
   "metadata_sources": {

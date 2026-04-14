@@ -71,7 +71,7 @@ export function MainLayout() {
         </nav>
         <div className="border-t border-zinc-200 p-2 text-xs text-zinc-500 dark:border-zinc-700">
           <ConnectionStatus status={wsStatus} className="mb-1" />
-          <div>v0.1.1</div>
+          <div>v0.1.2</div>
         </div>
       </aside>
 

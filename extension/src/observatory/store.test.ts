@@ -17,7 +17,7 @@ function minimalManifest(): Record<string, unknown> {
     },
     observatory: {
       initialized_at: "2026-04-05T10:00:00Z",
-      extension_version: "0.1.1",
+      extension_version: "0.1.2",
       scanners_used: [],
     },
   };
